@@ -1,0 +1,1762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Recall</title>
+<script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+<style>
+:root{
+  --bg:#0f0f11; --sur:#16161a; --sur2:#1d1d23; --sur3:#24242c;
+  --bd:#27272f; --bd2:#34343f;
+  --tx:#dddde8; --tx2:#7d7d98; --tx3:#42424f;
+  --ac:#6c5ce7; --ac2:#a29bfe; --ac-dim:rgba(108,92,231,.14);
+  --gr:#00b894; --gr-dim:rgba(0,184,148,.12);
+  --re:#e17055; --re-dim:rgba(225,112,85,.12);
+  --ye:#fdcb6e; --ye-dim:rgba(253,203,110,.10);
+  --r:5px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);font-size:14px;display:flex;flex-direction:column}
+::selection{background:var(--ac-dim)}
+
+/* ── TOPBAR ── */
+#topbar{height:42px;display:flex;align-items:center;gap:8px;padding:0 12px;
+  border-bottom:1px solid var(--bd);background:var(--sur);flex-shrink:0;z-index:20}
+.logo{font-weight:800;font-size:15px;color:var(--ac2)}
+#breadcrumb{display:flex;align-items:center;gap:0;flex:1;overflow:hidden;font-size:13px;color:var(--tx2);min-width:0}
+.bc-seg{cursor:pointer;white-space:nowrap;padding:2px 5px;border-radius:3px;max-width:170px;overflow:hidden;text-overflow:ellipsis}
+.bc-seg:hover{color:var(--tx);background:var(--sur2)}
+.bc-seg.cur{color:var(--tx);cursor:default;font-weight:500}
+.bc-seg.cur:hover{background:transparent}
+.bc-arr{color:var(--tx3);font-size:11px;padding:0 2px;flex-shrink:0}
+.tbtn{background:none;border:1px solid var(--bd);color:var(--tx2);padding:3px 9px;border-radius:var(--r);
+  cursor:pointer;font-size:12px;transition:.12s;white-space:nowrap;flex-shrink:0}
+.tbtn:hover{background:var(--sur2);color:var(--tx);border-color:var(--bd2)}
+.tbtn.hi{background:var(--ac);border-color:var(--ac);color:#fff}
+.tbtn.hi:hover{background:#7d6ef0}
+#saved{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:11px;color:var(--tx3);opacity:0;transition:opacity .3s;pointer-events:none}
+#saved.on{opacity:1}
+
+/* ── LAYOUT ── */
+#shell{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+#sb{width:232px;flex-shrink:0;background:var(--sur);border-right:1px solid var(--bd);
+  display:flex;flex-direction:column;overflow:hidden;transition:width .2s}
+#sb.closed{width:0}
+#sb-inner{width:232px;display:flex;flex-direction:column;height:100%;min-width:232px}
+#sb-head{padding:8px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--bd);flex-shrink:0}
+#sb-title{font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:1px;flex:1}
+#sb-tree{flex:1;overflow-y:auto;padding:4px 0}
+#sb-tree::-webkit-scrollbar{width:3px}
+#sb-tree::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+#sb-foot{padding:6px 8px;border-top:1px solid var(--bd);flex-shrink:0}
+.sb-act{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:var(--r);
+  cursor:pointer;font-size:12px;color:var(--tx2);user-select:none}
+.sb-act:hover{background:var(--sur2);color:var(--tx)}
+.sbr{display:flex;align-items:center;gap:4px;padding:3px 6px 3px 8px;cursor:pointer;
+  border-radius:4px;margin:1px 4px;min-height:26px;user-select:none}
+.sbr:hover{background:var(--sur2)}
+.sbr.active{background:var(--ac-dim)}
+.sbr.active .sb-lbl{color:var(--ac2)}
+.sb-arr{width:13px;height:13px;display:flex;align-items:center;justify-content:center;
+  color:var(--tx3);font-size:9px;flex-shrink:0;transition:transform .15s;border-radius:2px}
+.sb-arr:hover{background:var(--sur3);color:var(--tx2)}
+.sb-arr.open{transform:rotate(90deg)}
+.sb-arr.leaf{visibility:hidden;pointer-events:none}
+.sb-lbl{font-size:12px;color:var(--tx2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-cnt{font-size:10px;color:var(--tx3);flex-shrink:0}
+.sb-ch{padding-left:10px}
+
+/* ── MAIN ── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#view-head{padding:20px 36px 6px;flex-shrink:0}
+#view-title{font-size:24px;font-weight:700;color:var(--tx);outline:none;min-height:32px;
+  padding:2px 0;border:none;background:transparent;width:100%;display:block;line-height:1.3}
+#view-title:empty::before{content:attr(data-ph);color:var(--tx3);pointer-events:none}
+#ed-scroll{flex:1;overflow-y:auto;padding:4px 36px 120px}
+#ed-scroll::-webkit-scrollbar{width:4px}
+#ed-scroll::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+#ed-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:55%;gap:10px;color:var(--tx3);user-select:none;pointer-events:none}
+#ed-empty .big{font-size:44px;opacity:.15}
+#ed-empty p{font-size:13px;line-height:1.9;text-align:center}
+#ed-empty code{background:var(--sur2);padding:0 5px;border-radius:3px;font-family:monospace;color:var(--tx2)}
+#drill-empty{display:none;padding:16px 0 0;color:var(--tx3);font-size:13px;font-style:italic}
+#hint-bar{padding:2px 36px 6px;font-size:11px;color:var(--tx3);flex-shrink:0;display:none;line-height:1.6}
+#hint-bar.on{display:block}
+
+/* ── BULLET SYSTEM ── */
+.bl-list{list-style:none;padding:0;margin:0}
+.bl-item{position:relative}
+.bl-row{display:flex;align-items:flex-start;padding:1px 0}
+
+/* Gutter: arrow (left) + dot (right), clearly separated */
+.bl-gutter{width:36px;flex-shrink:0;display:flex;align-items:flex-start;
+  justify-content:space-between;padding-top:4px;gap:0;position:relative}
+/* Collapse arrow — always faintly visible when children exist, bright on hover */
+.bl-arrow{width:16px;height:16px;display:flex;align-items:center;justify-content:center;
+  color:var(--tx3);font-size:9px;cursor:pointer;border-radius:3px;
+  opacity:0;transition:opacity .15s,transform .15s;user-select:none;flex-shrink:0}
+.bl-item.has-ch > .bl-row > .bl-gutter > .bl-arrow{opacity:.25}
+.bl-row:hover > .bl-gutter > .bl-arrow{opacity:1!important}
+.bl-arrow:hover{background:var(--sur3);color:var(--tx2)}
+.bl-arrow.open{transform:rotate(90deg)}
+/* Dot — navigation, right side of gutter */
+.bl-dot{width:7px;height:7px;border-radius:50%;background:var(--tx3);flex-shrink:0;
+  cursor:pointer;transition:.15s;margin-top:6px}
+.bl-dot:hover{background:var(--ac2);transform:scale(1.35)}
+.bl-item.has-ch > .bl-row > .bl-gutter > .bl-dot{border-radius:2px}
+
+/* Content */
+.bl-content{flex:1;min-width:0;padding-right:6px;position:relative}
+/* Raw editable */
+.bl-inp{outline:none;white-space:pre-wrap;word-break:break-word;line-height:1.65;
+  font-size:14px;color:var(--tx);min-height:22px;padding:1px 0;
+  caret-color:var(--ac2);font-family:inherit;display:none}
+.bl-inp:empty::before{content:attr(data-ph);color:var(--tx3);pointer-events:none;font-style:italic;font-size:13px}
+/* View */
+.bl-view{line-height:1.65;font-size:14px;color:var(--tx);padding:1px 0;cursor:text;min-height:22px;display:block}
+.bl-view:empty::before{content:'\00a0'} /* keep height when empty */
+/* editing state */
+.bl-item.editing > .bl-row > .bl-content > .bl-inp{display:block}
+.bl-item.editing > .bl-row > .bl-content > .bl-view{display:none}
+.bl-item.editing > .bl-row > .bl-content > .mcq-wrap{display:none}
+
+/* Card view styles — compact, inline */
+.cv-note{color:var(--tx)}
+/* Linear: front → back */
+.cv-linear .cv-q{display:inline;color:var(--tx)}
+.cv-linear .cv-sep{display:inline;margin:0 5px;color:var(--tx3);font-size:12px;user-select:none}
+.cv-linear .cv-a{display:inline;color:var(--tx2)}
+/* MCQ: question ↓ a)|b|c on next line, correct bold */
+.cv-mcq .cv-q{display:block;color:var(--tx)}
+.cv-mcq .cv-sep-mcq{display:inline;margin:0 4px;color:var(--tx3);font-size:11px;user-select:none}
+.cv-mcq .cv-choices-inline{display:block;font-size:13px;color:var(--tx2);padding-left:2px;margin-top:1px}
+.cv-mcq .cv-ci{display:inline}
+.cv-mcq .cv-ci.ck{color:var(--tx);font-weight:700}
+.cv-mcq .cv-pipe{color:var(--tx3);margin:0 3px;user-select:none}
+
+/* MCQ editing UI */
+.mcq-wrap{display:none;flex-direction:column;gap:0;padding:1px 0}
+.bl-item.mcq-editing > .bl-row > .bl-content > .mcq-wrap{display:flex}
+.bl-item.mcq-editing > .bl-row > .bl-content > .bl-inp{display:block}
+.bl-item.mcq-editing > .bl-row > .bl-content > .bl-view{display:none}
+.mcq-hint{font-size:11px;color:var(--ac2);margin-top:2px;margin-bottom:3px;line-height:1.5}
+.mcq-hint code{background:var(--sur2);padding:0 3px;border-radius:2px;font-family:monospace}
+.mcq-count{font-size:10px;color:var(--tx3);margin-left:6px}
+.choice-row{display:flex;align-items:baseline;gap:5px;min-height:22px}
+.choice-ltr{font-size:12px;color:var(--tx3);flex-shrink:0;width:18px;user-select:none;padding-top:2px}
+.choice-row.is-correct .choice-ltr{color:var(--ac2)}
+.choice-inp{outline:none;white-space:pre-wrap;word-break:break-word;line-height:1.6;
+  font-size:13px;color:var(--tx2);min-height:20px;padding:1px 0;caret-color:var(--ac2);
+  font-family:inherit;flex:1}
+.choice-inp:empty::before{content:attr(data-ph);color:var(--tx3);pointer-events:none;font-style:italic}
+.choice-row.is-correct .choice-inp{color:var(--tx);font-weight:600}
+
+/* Practice pill */
+.prac-pill{display:none;position:absolute;right:0;top:2px;font-size:10px;font-weight:600;
+  color:var(--tx3);border:1px solid var(--bd);border-radius:3px;padding:1px 7px;
+  cursor:pointer;white-space:nowrap;background:var(--sur);user-select:none;z-index:2}
+.bl-row:hover > .bl-content > .prac-pill{display:block}
+.prac-pill:hover{color:var(--ac2);border-color:var(--ac);background:var(--ac-dim)}
+
+/* Children */
+.bl-children{padding-left:28px}
+.bl-item.has-ch > .bl-children{border-left:1px solid var(--bd)}
+.bl-item.has-ch.collapsed > .bl-children{display:none}
+
+/* ── MODALS base ── */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;
+  display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal-ov.open{display:flex}
+.modal-box{background:var(--sur);border:1px solid var(--bd2);border-radius:10px;padding:22px;
+  display:flex;flex-direction:column;gap:14px}
+.modal-box h3{font-size:14px;font-weight:600;color:var(--tx)}
+.modal-row{display:flex;gap:8px}
+.modal-row .tbtn{flex:1;padding:7px;text-align:center;font-size:13px}
+.ml{font-size:11px;font-weight:600;color:var(--tx3);text-transform:uppercase;letter-spacing:.8px}
+.minp{background:var(--sur2);border:1px solid var(--bd);color:var(--tx);
+  padding:7px 10px;border-radius:var(--r);font-size:14px;outline:none;width:100%}
+.minp:focus{border-color:var(--ac)}
+.seg{display:flex;border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.seg-btn{flex:1;padding:6px 10px;font-size:12px;color:var(--tx2);cursor:pointer;
+  text-align:center;transition:.12s;user-select:none}
+.seg-btn:hover{background:var(--sur2);color:var(--tx)}
+.seg-btn.on{background:var(--ac);color:#fff}
+
+/* ── PRACTICE OVERLAY ── */
+#prac-ov{position:fixed;inset:0;background:var(--bg);z-index:100;display:none;flex-direction:column}
+#prac-ov.open{display:flex}
+#prac-top{display:flex;align-items:center;gap:10px;padding:10px 16px;
+  border-bottom:1px solid var(--bd);flex-shrink:0}
+#prac-title{font-size:13px;font-weight:600;flex:1;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#prac-prog{font-size:12px;color:var(--tx2);flex-shrink:0;white-space:nowrap}
+#prac-cfg-btn{font-size:16px;padding:2px 7px;line-height:1;background:none;border:1px solid var(--bd);
+  border-radius:var(--r);color:var(--tx3);cursor:pointer;transition:.12s;flex-shrink:0}
+#prac-cfg-btn:hover{color:var(--tx);background:var(--sur2);border-color:var(--bd2)}
+/* In-session panel */
+#prac-panel{background:var(--sur2);border-bottom:1px solid var(--bd);padding:10px 18px;
+  display:none;gap:20px;align-items:center;flex-shrink:0;flex-wrap:wrap}
+#prac-panel.open{display:flex}
+.pp-row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx2)}
+.pp-row label{cursor:pointer;user-select:none}
+.pp-row input[type=range]{accent-color:var(--ac);width:90px;cursor:pointer}
+.pp-row input[type=checkbox]{accent-color:var(--ac);cursor:pointer;width:13px;height:13px}
+#pp-bc-val{min-width:16px;text-align:center;color:var(--tx);font-weight:600}
+#prac-track{height:2px;background:var(--bd);flex-shrink:0}
+#prac-fill{height:100%;background:var(--ac);width:0%;transition:width .25s}
+/* Card area */
+#prac-body{flex:1;display:flex;align-items:center;justify-content:center;padding:28px 24px;overflow:auto}
+#prac-card{width:100%;max-width:640px;display:flex;flex-direction:column;gap:14px}
+.prac-bc{font-size:12px;color:var(--tx3);text-align:center;line-height:1.7;min-height:18px}
+.pbc-n{color:var(--tx2)}
+.pbc-s{margin:0 5px;opacity:.3}
+/* Front */
+#pf{background:var(--sur);border:1px solid var(--bd);border-radius:10px;
+  padding:clamp(18px,3vw,32px);cursor:pointer;transition:border-color .15s}
+#pf:hover{border-color:var(--bd2)}
+#pf.done{border-color:var(--ac);cursor:default}
+.pf-q{font-size:clamp(17px,2.5vw,24px);font-weight:500;color:var(--tx);line-height:1.45}
+.pf-choices{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.pf-choice{padding:clamp(7px,1.2vw,12px) clamp(10px,1.5vw,16px);background:var(--sur2);
+  border:1px solid var(--bd);border-radius:6px;font-size:clamp(13px,1.8vw,16px);
+  color:var(--tx2);cursor:pointer;transition:.12s;user-select:none;line-height:1.4}
+.pf-choice:hover{border-color:var(--bd2);color:var(--tx)}
+.pf-choice.hi{border-color:var(--gr);color:var(--gr);background:var(--gr-dim);font-weight:700}
+.pf-hint{font-size:12px;color:var(--tx3);text-align:center;margin-top:12px;user-select:none}
+/* Back */
+#pb{background:var(--sur2);border:1px solid var(--bd);border-radius:10px;
+  padding:clamp(16px,2.5vw,26px);display:none;animation:fu .2s ease}
+#pb.show{display:block}
+@keyframes fu{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.pb-ans{font-size:clamp(16px,2.2vw,22px);font-weight:500;color:var(--gr);line-height:1.5}
+/* Controls */
+#prac-ctrl{display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:14px 16px;border-top:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap}
+.pc-btn{display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 20px;border-radius:8px;border:1px solid var(--bd);background:var(--sur);
+  cursor:pointer;transition:.12s;min-width:90px;user-select:none}
+.pc-btn:hover{background:var(--sur2)}
+.pc-ico{font-size:18px}
+.pc-lbl{font-size:10px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.pc-key{font-size:9px;color:var(--tx3);font-family:monospace;margin-top:1px}
+.pc-btn.forg:hover{background:var(--re-dim);border-color:var(--re)}
+.pc-btn.forg:hover .pc-ico{color:var(--re)}
+.pc-btn.remb:hover{background:var(--gr-dim);border-color:var(--gr)}
+.pc-btn.remb:hover .pc-ico{color:var(--gr)}
+.pc-btn.sk:hover{background:var(--ye-dim);border-color:var(--ye)}
+.pc-btn.sk:hover .pc-ico{color:var(--ye)}
+#rv-wrap{width:100%;display:flex;justify-content:center}
+#res-wrap{display:none;width:100%;justify-content:center;gap:10px;flex-wrap:wrap}
+#res-wrap.show{display:flex}
+
+/* ── SUMMARY ── */
+#sum-ov{position:fixed;inset:0;background:var(--bg);z-index:110;display:none;flex-direction:column}
+#sum-ov.open{display:flex}
+#sum-head{display:flex;align-items:center;gap:10px;padding:12px 22px;border-bottom:1px solid var(--bd);flex-shrink:0}
+#sum-head h2{font-size:15px;font-weight:600;flex:1}
+#sum-body{flex:1;overflow-y:auto;padding:24px;max-width:560px;margin:0 auto;width:100%;display:flex;flex-direction:column;gap:12px}
+.ss{display:flex;gap:10px}
+.ss-b{flex:1;background:var(--sur);border:1px solid var(--bd);border-radius:8px;padding:14px;text-align:center}
+.ss-n{font-size:26px;font-weight:700}
+.ss-n.g{color:var(--gr)}.ss-n.r{color:var(--re)}.ss-n.y{color:var(--ye)}
+.ss-l{font-size:10px;color:var(--tx3);font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-top:4px}
+.sum-r{display:flex;align-items:center;gap:10px;padding:7px 10px;
+  background:var(--sur);border:1px solid var(--bd);border-radius:5px}
+.sdot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sdot.g{background:var(--gr)}.sdot.r{background:var(--re)}.sdot.y{background:var(--ye)}
+.stx{font-size:12px;color:var(--tx2);flex:1}
+#sum-foot{padding:12px 22px;border-top:1px solid var(--bd);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
+
+/* ── CTX MENU ── */
+#ctx{position:fixed;background:var(--sur);border:1px solid var(--bd2);border-radius:7px;
+  padding:4px;z-index:400;display:none;flex-direction:column;min-width:172px;
+  box-shadow:0 10px 30px rgba(0,0,0,.55)}
+#ctx.open{display:flex}
+.ci{padding:6px 11px;border-radius:4px;cursor:pointer;font-size:12px;color:var(--tx2);
+  display:flex;align-items:center;gap:8px;user-select:none}
+.ci:hover{background:var(--sur2);color:var(--tx)}
+.ci.red{color:var(--re)}
+.ci.red:hover{background:var(--re-dim);color:var(--re)}
+.cx-sep{height:1px;background:var(--bd);margin:3px 0}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <button class="tbtn" id="sb-tog" title="Sidebar">☰</button>
+  <span class="logo">◈</span>
+  <div id="breadcrumb"></div>
+  <span id="saved">Saved</span>
+  <button class="tbtn hidden" id="btn-prac">▶ Practice</button>
+  <button class="tbtn" id="btn-export">Export</button>
+  <button class="tbtn" id="btn-import">Import</button>
+  <input type="file" id="import-file" class="hidden" accept=".json"/>
+</div>
+
+<div id="shell">
+  <div id="sb">
+    <div id="sb-inner">
+      <div id="sb-head">
+        <span id="sb-title">Library</span>
+        <button class="tbtn" id="btn-new-doc" style="font-size:11px;padding:2px 7px">+ New</button>
+      </div>
+      <div id="sb-tree"></div>
+      <div id="sb-foot">
+        <div class="sb-act" id="sb-coll">⊟ &nbsp;Collapse all</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="view-head">
+      <div id="view-title" contenteditable="false" data-ph="Untitled"></div>
+    </div>
+    <div id="ed-scroll">
+      <div id="ed-empty">
+        <div class="big">◈</div>
+        <p>Select or create a document<br><br>
+        <code>Enter</code> new bullet &nbsp;·&nbsp; <code>Tab</code> indent &nbsp;·&nbsp; <code>Shift+Tab</code> unindent<br>
+        <code>text ;; answer</code> — card &nbsp;·&nbsp; <code>text ;;;</code> — MCQ<br>
+        In MCQ: <code>Enter</code> next choice &nbsp;·&nbsp; <code>#</code> prefix = correct &nbsp;·&nbsp; <code>Shift+Enter</code> done<br>
+        Click <strong>dot</strong> to drill in &nbsp;·&nbsp; Hover for collapse arrow</p>
+      </div>
+      <div id="drill-empty">Press Enter to add the first item here…</div>
+      <ul class="bl-list hidden" id="bl-root"></ul>
+    </div>
+    <div id="hint-bar"></div>
+  </div>
+</div>
+
+<!-- CTX MENU -->
+<div id="ctx">
+  <div class="ci" data-a="drill">↗ &nbsp;Open (drill in)</div>
+  <div class="ci" data-a="add-child">＋ &nbsp;Add child</div>
+  <div class="ci" data-a="add-sibling">↵ &nbsp;Add sibling below</div>
+  <div class="cx-sep"></div>
+  <div class="ci" data-a="practice">▶ &nbsp;Practice subtree</div>
+  <div class="cx-sep"></div>
+  <div class="ci red" data-a="delete">✕ &nbsp;Delete</div>
+</div>
+
+<!-- NEW DOC -->
+<div class="modal-ov" id="ndm">
+  <div class="modal-box" style="width:300px">
+    <h3>New Document</h3>
+    <input class="minp" id="ndm-inp" type="text" placeholder="Document title…" autocomplete="off"/>
+    <div class="modal-row">
+      <button class="tbtn" id="ndm-cancel">Cancel</button>
+      <button class="tbtn hi" id="ndm-ok">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRACTICE CONFIG -->
+<div class="modal-ov" id="cfg-ov">
+  <div class="modal-box" style="width:310px">
+    <h3>Start Practice</h3>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <span class="ml">Order</span>
+      <div class="seg">
+        <div class="seg-btn on" data-order="seq">In order</div>
+        <div class="seg-btn" data-order="rnd">Shuffle</div>
+      </div>
+    </div>
+    <div class="modal-row">
+      <button class="tbtn" id="cfg-cancel">Cancel</button>
+      <button class="tbtn hi" id="cfg-start">Start</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRACTICE OVERLAY -->
+<div id="prac-ov">
+  <div id="prac-top">
+    <span id="prac-title">Practice</span>
+    <span id="prac-prog"></span>
+    <button id="prac-cfg-btn" title="Session settings">⚙</button>
+    <button class="tbtn" id="btn-end-prac">End</button>
+  </div>
+  <div id="prac-panel">
+    <div class="pp-row">
+      <label for="pp-bc">Ancestor context:</label>
+      <input type="range" id="pp-bc" min="0" max="10" value="2"/>
+      <span id="pp-bc-val">2</span>
+    </div>
+    <div class="pp-row">
+      <input type="checkbox" id="pp-shuf"/>
+      <label for="pp-shuf">Re-shuffle remaining (one-shot)</label>
+    </div>
+  </div>
+  <div id="prac-track"><div id="prac-fill"></div></div>
+  <div id="prac-body">
+    <div id="prac-card">
+      <div class="prac-bc" id="prac-bc"></div>
+      <div id="pf">
+        <div class="pf-q" id="pf-q"></div>
+        <div class="pf-choices hidden" id="pf-choices"></div>
+        <div class="pf-hint">Press any key or tap to reveal</div>
+      </div>
+      <div id="pb"><div class="pb-ans" id="pb-ans"></div></div>
+    </div>
+  </div>
+  <div id="prac-ctrl">
+    <div id="rv-wrap">
+      <div class="pc-btn" id="rv-btn" style="min-width:200px">
+        <span class="pc-ico">👁</span><span class="pc-lbl">Reveal</span><span class="pc-key">Any key · Tap</span>
+      </div>
+    </div>
+    <div id="res-wrap">
+      <div class="pc-btn forg" id="pc-forg"><span class="pc-ico">✗</span><span class="pc-lbl">Forgot</span><span class="pc-key">← J</span></div>
+      <div class="pc-btn sk" id="pc-skip"><span class="pc-ico">⤵</span><span class="pc-lbl">Skip</span><span class="pc-key">↓ S</span></div>
+      <div class="pc-btn remb" id="pc-remb"><span class="pc-ico">✓</span><span class="pc-lbl">Remembered</span><span class="pc-key">→ L</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- SUMMARY -->
+<div id="sum-ov">
+  <div id="sum-head"><h2>Session Complete</h2><button class="tbtn" id="sum-x">✕</button></div>
+  <div id="sum-body"></div>
+  <div id="sum-foot">
+    <button class="tbtn" id="sum-retry">Retry Forgotten</button>
+    <button class="tbtn hi" id="sum-done">Done</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ══════════════════════════════════════════════
+//  DB
+// ══════════════════════════════════════════════
+const db = new Dexie('RecallV4');
+db.version(1).stores({ docs:'id,order', nodes:'id,docId,parentId,order' });
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let docs={}, docOrder=[], nodes={};
+// Navigation: stack of {type:'doc'|'node', id, label}
+let nav=[];
+let curView=null; // {type, id}
+let sbExp=new Set();
+
+// Practice
+let pQ=[], pIdx=0, pRev=false, pRes=[], pLabel='';
+let pCfgOrder='seq';
+let pendingCards=null;
+
+// ══════════════════════════════════════════════
+//  PARSE
+// ══════════════════════════════════════════════
+function parse(text){
+  if(!text) return {type:'note',q:'',a:'',choices:[],correct:0,fmt:'linear'};
+  // MCQ: Q ;;; choices (# marks correct)
+  if(text.includes(';;;')){
+    const si=text.indexOf(';;;');
+    const q=text.slice(0,si).trim();
+    const raw=text.slice(si+3).trim().split('|').map(s=>s.trim()).filter(Boolean);
+    let correct=0;
+    const choices=raw.map((c,i)=>{
+      if(c.startsWith('#')){correct=i;return c.slice(1).trim();}
+      if(c.endsWith('#')){correct=i;return c.slice(0,-1).trim();}
+      return c;
+    });
+    return {type:'card',fmt:'mcq',q,a:choices[correct]||'',choices,correct};
+  }
+  // Linear: Q ;; A  (also handle ― and → as separators from imported data)
+  const linSep = text.includes(';;') ? ';;' : text.includes('―') ? '―' : text.includes('→') ? '→' : null;
+  if(linSep){
+    const si=text.indexOf(linSep);
+    const q=text.slice(0,si).trim();
+    const a=text.slice(si+linSep.length).trim();
+    if(q&&a) return {type:'card',fmt:'linear',q,a,choices:[],correct:0};
+  }
+  return {type:'note',q:text,a:'',choices:[],correct:0,fmt:'linear'};
+}
+
+function lbl(n){if(!n)return'';return n.type==='card'?n.q||n.text||'':n.text||'';}
+
+// ══════════════════════════════════════════════
+//  DB OPS
+// ══════════════════════════════════════════════
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+
+async function loadAll(){
+  const ds=await db.docs.toArray(), ns=await db.nodes.toArray();
+  docs={}; docOrder=[];
+  ds.sort((a,b)=>a.order-b.order).forEach(d=>{docs[d.id]=d;docOrder.push(d.id);});
+  nodes={};
+  ns.forEach(n=>{nodes[n.id]=n;});
+}
+
+async function saveDoc(d){docs[d.id]=d;await db.docs.put(d);flash();}
+async function saveNode(n){nodes[n.id]=n;await db.nodes.put(n);flash();}
+
+async function delNodeRec(id){
+  const ch=getCh(id);
+  for(const c of ch) await delNodeRec(c.id);
+  await db.nodes.delete(id); delete nodes[id];
+}
+async function delDoc(docId){
+  const ns=Object.values(nodes).filter(n=>n.docId===docId);
+  for(const n of ns){await db.nodes.delete(n.id);delete nodes[n.id];}
+  await db.docs.delete(docId); delete docs[docId];
+  docOrder=docOrder.filter(i=>i!==docId);
+}
+
+async function mkDoc(title){
+  const d={id:uid(),title:title||'Untitled',order:docOrder.length,createdAt:Date.now()};
+  docOrder.push(d.id); docs[d.id]=d; await db.docs.put(d); return d;
+}
+
+async function mkNode(docId,parentId,text,afterId=null){
+  const p=parse(text||'');
+  const siblings=getCh(parentId,docId);
+  let order=siblings.length;
+  if(afterId!==null){
+    const idx=siblings.findIndex(s=>s.id===afterId);
+    if(idx>=0){
+      order=idx+1;
+      for(const s of siblings){if(s.order>=order){s.order++;await db.nodes.put(s);nodes[s.id]=s;}}
+    }
+  }
+  const n={id:uid(),docId,parentId:parentId||null,order,text:text||'',
+    type:p.type,fmt:p.fmt,q:p.q,a:p.a,choices:p.choices,correct:p.correct,
+    imageData:null,imageBoxes:[],createdAt:Date.now()};
+  await saveNode(n); return n;
+}
+
+async function updText(id,text){
+  const n=nodes[id]; if(!n) return;
+  const p=parse(text);
+  Object.assign(n,{text,type:p.type,fmt:p.fmt,q:p.q,a:p.a,choices:p.choices,correct:p.correct});
+  await saveNode(n);
+}
+
+function getCh(parentId,docId){
+  const did=docId||(parentId?nodes[parentId]?.docId:null)||(curView?.type==='doc'?curView.id:nodes[curView?.id]?.docId)||null;
+  return Object.values(nodes)
+    .filter(n=>n.docId===did&&n.parentId===(parentId||null))
+    .sort((a,b)=>a.order-b.order);
+}
+
+function getAncs(id){
+  const c=[]; let cur=nodes[id];
+  while(cur&&cur.parentId){cur=nodes[cur.parentId];if(cur)c.unshift(cur);}
+  return c;
+}
+
+function collectCards(rootId,docId,fromDoc=false){
+  const res=[];
+  function walk(pid,did){
+    const ch=getCh(pid,did);
+    for(const n of ch){
+      if(n.type==='card') res.push(n);
+      walk(n.id,did);
+    }
+  }
+  if(fromDoc){walk(null,docId);}
+  else{const n=nodes[rootId];if(n&&n.type==='card')res.push(n);walk(rootId,docId||n?.docId);}
+  return res;
+}
+
+// ══════════════════════════════════════════════
+//  SAVED FLASH
+// ══════════════════════════════════════════════
+let flashT=null;
+function flash(){
+  const el=document.getElementById('saved');
+  el.classList.add('on'); clearTimeout(flashT);
+  flashT=setTimeout(()=>el.classList.remove('on'),1400);
+}
+
+// ══════════════════════════════════════════════
+//  BREADCRUMB
+// ══════════════════════════════════════════════
+function renderBC(){
+  const bc=document.getElementById('breadcrumb'); bc.innerHTML='';
+  const home=document.createElement('span'); home.className='bc-seg';
+  home.textContent='Library';
+  home.addEventListener('click',()=>{nav=[];curView=null;renderView();renderSB();});
+  bc.appendChild(home);
+  nav.forEach((item,i)=>{
+    const arr=document.createElement('span'); arr.className='bc-arr'; arr.textContent='›';
+    const seg=document.createElement('span');
+    seg.className='bc-seg'+(i===nav.length-1?' cur':'');
+    seg.textContent=item.label;
+    if(i<nav.length-1) seg.addEventListener('click',()=>{
+      nav=nav.slice(0,i+1);
+      curView={type:item.type,id:item.id};
+      renderView(); renderSB();
+    });
+    bc.append(arr,seg);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  SIDEBAR
+// ══════════════════════════════════════════════
+const sbTree=document.getElementById('sb-tree');
+function renderSB(){
+  sbTree.innerHTML='';
+  for(const docId of docOrder){
+    const d=docs[docId]; if(!d) continue;
+    sbTree.appendChild(buildSBDoc(docId));
+  }
+}
+function buildSBDoc(docId){
+  const d=docs[docId];
+  const isOpen=sbExp.has(docId);
+  const top=getCh(null,docId);
+  const cc=collectCards(null,docId,true).length;
+  // Active: current doc or any node within it
+  const isActive=curView&&(
+    (curView.type==='doc'&&curView.id===docId)||
+    (curView.type==='node'&&nodes[curView.id]?.docId===docId)
+  );
+  const wrap=document.createElement('div');
+  const row=document.createElement('div'); row.className='sbr'+(isActive?' active':'');
+  const arr=document.createElement('span');
+  arr.className='sb-arr'+(top.length?(isOpen?' open':''):'  leaf');
+  arr.textContent='▶';
+  arr.addEventListener('click',e=>{e.stopPropagation();
+    sbExp.has(docId)?sbExp.delete(docId):sbExp.add(docId); renderSB();});
+  const lx=document.createElement('span'); lx.className='sb-lbl'; lx.textContent=d.title;
+  const cnt=document.createElement('span'); cnt.className='sb-cnt'; if(cc>0)cnt.textContent=cc;
+  row.append(arr,lx,cnt);
+  row.addEventListener('click',()=>navTo('doc',docId,d.title));
+  row.addEventListener('contextmenu',e=>{e.preventDefault();openCtx(e,null,docId);});
+  wrap.appendChild(row);
+  if(isOpen&&top.length){
+    const ch=document.createElement('div'); ch.className='sb-ch';
+    top.forEach(n=>{
+      const r=document.createElement('div'); r.className='sbr';
+      const l=document.createElement('span'); l.className='sb-lbl'; l.textContent=lbl(n)||'…';
+      r.appendChild(l);
+      r.addEventListener('click',()=>navTo('node',n.id,lbl(n)||'…'));
+      ch.appendChild(r);
+    });
+    wrap.appendChild(ch);
+  }
+  return wrap;
+}
+
+// ══════════════════════════════════════════════
+//  NAVIGATION
+// ══════════════════════════════════════════════
+function navTo(type,id,label){
+  if(type==='doc'){
+    nav=[{type:'doc',id,label}];
+    curView={type:'doc',id};
+  } else {
+    const n=nodes[id]; if(!n) return;
+    const d=docs[n.docId];
+    const ancs=getAncs(id);
+    nav=[{type:'doc',id:n.docId,label:d?d.title:'…'}];
+    ancs.forEach(a=>nav.push({type:'node',id:a.id,label:lbl(a)||'…'}));
+    nav.push({type:'node',id,label:label||lbl(n)||'…'});
+    curView={type:'node',id};
+  }
+  renderView(); renderSB(); renderBC();
+}
+
+function drillInto(nodeId){
+  const n=nodes[nodeId]; if(!n) return;
+  const l=lbl(n)||'…';
+  nav.push({type:'node',id:nodeId,label:l});
+  curView={type:'node',id:nodeId};
+  renderView(); renderSB(); renderBC();
+}
+
+// ══════════════════════════════════════════════
+//  VIEW RENDER
+// ══════════════════════════════════════════════
+const blRoot=document.getElementById('bl-root');
+const edEmpty=document.getElementById('ed-empty');
+const drillEmpty=document.getElementById('drill-empty');
+const viewTitleEl=document.getElementById('view-title');
+const hintBar=document.getElementById('hint-bar');
+
+function renderView(){
+  blRoot.innerHTML='';
+  edEmpty.style.display='none';
+  drillEmpty.style.display='none';
+  blRoot.classList.add('hidden');
+  const pracBtn=document.getElementById('btn-prac');
+
+  if(!curView){
+    edEmpty.style.display='';
+    viewTitleEl.textContent=''; viewTitleEl.contentEditable='false';
+    pracBtn.classList.add('hidden'); hintBar.classList.remove('on'); renderBC(); return;
+  }
+
+  let title='', topNodes=[], docId=null;
+
+  if(curView.type==='doc'){
+    const d=docs[curView.id]; if(!d){curView=null;renderView();return;}
+    title=d.title; docId=curView.id;
+    topNodes=getCh(null,docId);
+    viewTitleEl.contentEditable='true';
+  } else {
+    const n=nodes[curView.id]; if(!n){curView=null;renderView();return;}
+    title=lbl(n)||'…'; docId=n.docId;
+    topNodes=getCh(n.id,docId);
+    viewTitleEl.contentEditable='false';
+    // Show node's own card if it's a card
+    if(n.type==='card'){
+      const cardHead=document.createElement('div');
+      cardHead.style.cssText='padding:4px 0 10px;border-bottom:1px solid var(--bd);margin-bottom:8px';
+      cardHead.appendChild(mkView(n));
+      blRoot.appendChild(cardHead);
+    }
+  }
+
+  viewTitleEl.textContent=title;
+  hintBar.classList.add('on');
+  hintBar.innerHTML='<strong>Enter</strong> new bullet &nbsp;·&nbsp; <strong>Tab</strong> indent &nbsp;·&nbsp; <strong>Shift+Tab</strong> unindent &nbsp;·&nbsp; <code>;;</code> card &nbsp;·&nbsp; <code>;;;</code> MCQ (<code>#</code>=correct, <strong>Shift+Enter</strong>=done→next)';
+
+  if(topNodes.length===0 && curView.type==='node'){
+    drillEmpty.style.display='block';
+  }
+
+  blRoot.classList.remove('hidden');
+  for(const n of topNodes) blRoot.appendChild(buildBullet(n));
+
+  // Update practice button — works from any view depth
+  const cards = curView.type==='doc'
+    ? collectCards(null,curView.id,true)
+    : collectCards(curView.id, nodes[curView.id]?.docId);
+  if(cards.length){
+    pracBtn.classList.remove('hidden');
+    pracBtn.textContent=`▶ Practice (${cards.length})`;
+  } else {
+    pracBtn.classList.add('hidden');
+  }
+  renderBC();
+}
+
+// ══════════════════════════════════════════════
+//  BUILD BULLET
+// ══════════════════════════════════════════════
+function buildBullet(node){
+  const ch=getCh(node.id,node.docId);
+  const li=document.createElement('li');
+  li.className='bl-item'+(ch.length?' has-ch':'');
+  li.dataset.id=node.id;
+
+  const row=document.createElement('div'); row.className='bl-row';
+
+  // Gutter: arrow LEFT, dot RIGHT
+  const gutter=document.createElement('div'); gutter.className='bl-gutter';
+  const arrow=document.createElement('div');
+  arrow.className='bl-arrow'+(ch.length?' open':' leaf');
+  arrow.textContent='▶';
+  arrow.title='Collapse/Expand';
+  arrow.addEventListener('click',e=>{e.stopPropagation();toggleColl(li,arrow);});
+  const dot=document.createElement('div'); dot.className='bl-dot';
+  dot.title='Drill in';
+  dot.addEventListener('click',e=>{e.stopPropagation();drillInto(node.id);});
+  gutter.append(arrow,dot);
+
+  // Content
+  const content=document.createElement('div'); content.className='bl-content';
+
+  // Raw input (always present, shown in editing mode)
+  const inp=document.createElement('div');
+  inp.className='bl-inp';
+  inp.contentEditable='true';
+  inp.dataset.ph='Type…  (;; answer · ;;; MCQ)';
+  inp.textContent=node.text||'';
+  wireInp(inp,node,li,content);
+
+  // Rendered view
+  const view=mkView(node);
+
+  // MCQ editing wrapper (built on demand)
+  const mcqWrap=document.createElement('div'); mcqWrap.className='mcq-wrap';
+
+  // Practice pill
+  const pill=document.createElement('span'); pill.className='prac-pill'; pill.textContent='▶ Practice';
+  pill.addEventListener('click',e=>{e.stopPropagation();
+    openCfgFor(collectCards(node.id,node.docId),[lbl(node)]);});
+  if(node.type!=='card') pill.style.display='none';
+
+  content.append(inp,view,mcqWrap,pill);
+  row.append(gutter,content);
+  li.appendChild(row);
+
+  // Children list
+  const childList=document.createElement('ul'); childList.className='bl-list bl-children';
+  for(const c of ch) childList.appendChild(buildBullet(c));
+  li.appendChild(childList);
+  return li;
+}
+
+function toggleColl(li,arrow){
+  if(!li.classList.contains('has-ch')) return;
+  const coll=li.classList.toggle('collapsed');
+  arrow.classList.toggle('open',!coll);
+}
+
+// ══════════════════════════════════════════════
+//  VIEW BUILDER (compact card rendering)
+// ══════════════════════════════════════════════
+function mkView(node){
+  const v=document.createElement('div');
+  if(node.type==='note'||!node.q){
+    v.className='bl-view cv-note'; v.textContent=node.text||''; return v;
+  }
+  if(node.fmt==='linear'){
+    v.className='bl-view cv-linear';
+    const q=document.createElement('span'); q.className='cv-q'; q.textContent=node.q;
+    const sep=document.createElement('span'); sep.className='cv-sep'; sep.textContent='→';
+    const a=document.createElement('span'); a.className='cv-a'; a.textContent=node.a;
+    v.append(q,sep,a);
+  } else {
+    // MCQ compact: question on first line, then ↓ a) | b) | c) with correct bold
+    v.className='bl-view cv-mcq';
+    const q=document.createElement('div'); q.className='cv-q'; q.textContent=node.q;
+    const ci=document.createElement('div'); ci.className='cv-choices-inline';
+    (node.choices||[]).forEach((c,i)=>{
+      if(i>0){const pipe=document.createElement('span');pipe.className='cv-pipe';pipe.textContent='|';ci.appendChild(pipe);}
+      const ch=document.createElement('span');
+      ch.className='cv-ci'+(i===node.correct?' ck':'');
+      ch.textContent=String.fromCharCode(97+i)+') '+c;
+      ci.appendChild(ch);
+    });
+    v.append(q,ci);
+  }
+  return v;
+}
+
+// ══════════════════════════════════════════════
+//  WIRE INPUT
+// ══════════════════════════════════════════════
+const mcqState={}; // nodeId -> {q,choices:[{text,correct}]}
+
+function wireInp(inp,node,li,content){
+  let saveT=null;
+
+  inp.addEventListener('focus',()=>{
+    document.querySelectorAll('.bl-item.editing,.bl-item.mcq-editing').forEach(el=>{
+      if(el!==li) exitEdit(el);
+    });
+    li.classList.add('editing');
+    // If already mcq, go to mcq mode
+    if(node.fmt==='mcq'&&node.choices&&node.choices.length) enterMcq(node,li,content,inp,false);
+  });
+
+  inp.addEventListener('blur',()=>{
+    if(li.classList.contains('mcq-editing')) return;
+    clearTimeout(saveT);
+    doSave(node,inp.textContent,li,content);
+  });
+
+  inp.addEventListener('input',()=>{
+    clearTimeout(saveT);
+    const t=inp.textContent;
+    if(t.endsWith(';;;')){
+      inp.textContent=t.slice(0,-3).trim();
+      setTimeout(()=>enterMcq(node,li,content,inp,true),0);
+      return;
+    }
+    saveT=setTimeout(()=>updText(node.id,inp.textContent),1200);
+  });
+
+  inp.addEventListener('keydown',async e=>{
+    if(li.classList.contains('mcq-editing')) return;
+    const t=inp.textContent;
+    if(e.key==='Enter'&&!e.shiftKey){
+      e.preventDefault(); clearTimeout(saveT); await updText(node.id,t);
+      const nn=await mkNode(node.docId,node.parentId,'',node.id); rerender(nn.id);
+    }
+    if(e.key==='Tab'&&!e.shiftKey){
+      e.preventDefault(); clearTimeout(saveT); await updText(node.id,t);
+      const siblings=getCh(node.parentId,node.docId);
+      const idx=siblings.findIndex(s=>s.id===node.id);
+      if(idx>0){
+        const prev=siblings[idx-1];
+        const n2=nodes[node.id];
+        n2.parentId=prev.id; n2.order=getCh(prev.id,node.docId).length;
+        await saveNode(n2); rerender(node.id);
+      }
+    }
+    if(e.key==='Tab'&&e.shiftKey){
+      e.preventDefault(); clearTimeout(saveT); await updText(node.id,t);
+      const n2=nodes[node.id]; if(!n2.parentId) return;
+      const par=nodes[n2.parentId]; if(!par) return;
+      n2.parentId=par.parentId||null; n2.order=par.order+0.5; await saveNode(n2);
+      const sibs=getCh(n2.parentId,n2.docId);
+      sibs.forEach(async(s,i)=>{s.order=i;await saveNode(s);});
+      rerender(node.id);
+    }
+    if(e.key==='Backspace'&&t===''){
+      e.preventDefault();
+      const siblings=getCh(node.parentId,node.docId);
+      const idx=siblings.findIndex(s=>s.id===node.id);
+      const prev=idx>0?siblings[idx-1].id:(node.parentId||null);
+      await delNodeRec(node.id); rerender(prev);
+    }
+    if(e.key==='Escape') exitEdit(li);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  MCQ EDITING
+// ══════════════════════════════════════════════
+function enterMcq(node,li,content,qInp,isNew){
+  if(li.classList.contains('mcq-editing')) return;
+  li.classList.add('mcq-editing');
+
+  if(isNew||!mcqState[node.id]){
+    mcqState[node.id]={
+      q: isNew?(qInp.textContent||''):(node.q||''),
+      choices: isNew?[]:(node.choices||[]).map((c,i)=>({text:c,correct:i===node.correct}))
+    };
+  }
+  qInp.textContent=mcqState[node.id].q;
+
+  const mcqWrap=content.querySelector('.mcq-wrap');
+  mcqWrap.innerHTML='';
+
+  const hint=document.createElement('div'); hint.className='mcq-hint';
+  hint.innerHTML='MCQ mode &nbsp;·&nbsp; <code>Enter</code> next choice &nbsp;·&nbsp; <code>#</code> prefix = correct &nbsp;·&nbsp; <code>Shift+Enter</code> done→next bullet';
+  mcqWrap.appendChild(hint);
+
+  const choiceArea=document.createElement('div'); choiceArea.className='mcq-choices-area';
+  mcqWrap.appendChild(choiceArea);
+
+  const state=mcqState[node.id];
+  if(isNew||state.choices.length===0) state.choices.push({text:'',correct:false});
+
+  function renderChoices(){
+    choiceArea.innerHTML='';
+    const countEl=document.createElement('span'); countEl.className='mcq-count';
+    countEl.textContent=state.choices.length+' choice'+(state.choices.length!==1?'s':'');
+    hint.appendChild(countEl);
+    state.choices.forEach((ch,i)=>choiceArea.appendChild(buildChoiceRow(i,state,node,li,content,qInp,renderChoices)));
+  }
+  renderChoices();
+
+  // Focus last choice
+  setTimeout(()=>{
+    const inputs=choiceArea.querySelectorAll('.choice-inp');
+    if(inputs.length) inputs[inputs.length-1].focus();
+  },20);
+
+  qInp.addEventListener('input',()=>{state.q=qInp.textContent;});
+  qInp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault(); const f=choiceArea.querySelector('.choice-inp'); if(f)f.focus();}
+  });
+}
+
+function buildChoiceRow(idx,state,node,li,content,qInp,renderChoices){
+  const ch=state.choices[idx];
+  const row=document.createElement('div');
+  row.className='choice-row'+(ch.correct?' is-correct':'');
+
+  const ltr=document.createElement('span'); ltr.className='choice-ltr';
+  ltr.textContent=String.fromCharCode(97+idx)+')';
+
+  const cinp=document.createElement('div');
+  cinp.className='choice-inp';
+  cinp.contentEditable='true';
+  cinp.dataset.ph='Choice…  # prefix = correct';
+  cinp.textContent=ch.text||'';
+
+  cinp.addEventListener('input',()=>{
+    let t=cinp.textContent;
+    if(t.startsWith('#')){
+      state.choices.forEach(c=>c.correct=false);
+      ch.correct=true; t=t.slice(1); cinp.textContent=t; moveCaret(cinp);
+      content.querySelectorAll('.choice-row').forEach((r,i)=>r.classList.toggle('is-correct',!!state.choices[i]?.correct));
+    }
+    ch.text=cinp.textContent;
+  });
+
+  cinp.addEventListener('keydown',async e=>{
+    ch.text=cinp.textContent;
+    if(e.key==='Enter'&&!e.shiftKey){
+      e.preventDefault();
+      state.choices.push({text:'',correct:false});
+      renderChoices();
+      const inputs=content.querySelectorAll('.choice-inp');
+      if(inputs[idx+1]) inputs[idx+1].focus();
+    }
+    if(e.key==='Enter'&&e.shiftKey){
+      e.preventDefault();
+      await commitMcq(node,state,qInp);
+      exitEdit(li);
+      // Create sibling below and focus it
+      const nn=await mkNode(node.docId,node.parentId,'',node.id);
+      rerender(nn.id);
+    }
+    if(e.key==='Escape'){
+      e.preventDefault();
+      await commitMcq(node,state,qInp);
+      exitEdit(li); rerender(node.id);
+    }
+    if(e.key==='Backspace'&&cinp.textContent===''){
+      e.preventDefault();
+      if(state.choices.length>1){
+        state.choices.splice(idx,1); renderChoices();
+        const inputs=content.querySelectorAll('.choice-inp');
+        if(inputs[Math.max(0,idx-1)]) inputs[Math.max(0,idx-1)].focus();
+      }
+    }
+    if(e.key==='Tab'){
+      e.preventDefault();
+      await commitMcq(node,state,qInp);
+      exitEdit(li);
+      const nn=await mkNode(node.docId,node.parentId,'',node.id);
+      rerender(nn.id);
+    }
+  });
+
+  cinp.addEventListener('blur',()=>{ch.text=cinp.textContent;});
+  row.append(ltr,cinp); return row;
+}
+
+async function commitMcq(node,state,qInp){
+  const q=(qInp.textContent||state.q).trim();
+  const validChoices=state.choices.filter(c=>c.text.trim());
+  if(!validChoices.length){await updText(node.id,q||node.text||'');delete mcqState[node.id];return;}
+  const choiceStr=validChoices.map((c)=>(c.correct?'#':'')+c.text.trim()).join(' | ');
+  await updText(node.id,q+' ;;; '+choiceStr);
+  delete mcqState[node.id];
+}
+
+async function doSave(node,text,li,content){
+  await updText(node.id,text);
+  rebuildView(node.id,content);
+  li.classList.remove('editing','mcq-editing');
+  renderSB(); updPracBtn();
+}
+
+function rebuildView(nodeId,content){
+  content.querySelector('.bl-view')?.remove();
+  content.querySelector('.mcq-wrap') && (content.querySelector('.mcq-wrap').innerHTML='');
+  const nv=mkView(nodes[nodeId]);
+  content.querySelector('.bl-inp').insertAdjacentElement('afterend',nv);
+  const pill=content.querySelector('.prac-pill');
+  if(pill) pill.style.display=nodes[nodeId]?.type==='card'?'':'none';
+}
+
+function exitEdit(li){
+  li.classList.remove('editing','mcq-editing');
+}
+
+function moveCaret(el){
+  const r=document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s=window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+// Click on view = enter edit
+document.getElementById('ed-scroll').addEventListener('click',e=>{
+  const view=e.target.closest('.bl-view');
+  if(view&&!e.target.closest('.prac-pill')){
+    const li=view.closest('.bl-item');
+    if(li){enterEditLi(li); return;}
+  }
+  // Click empty space = new bullet
+  if((e.target.id==='ed-scroll'||e.target.id==='bl-root'||e.target.id==='drill-empty')&&curView){
+    const docId=curView.type==='doc'?curView.id:nodes[curView.id]?.docId;
+    const parentId=curView.type==='node'?curView.id:null;
+    if(docId) mkNode(docId,parentId,'').then(n=>{drillEmpty.style.display='none';rerender(n.id);});
+  }
+});
+
+function enterEditLi(li){
+  document.querySelectorAll('.bl-item.editing,.bl-item.mcq-editing').forEach(el=>{if(el!==li)exitEdit(el);});
+  li.classList.add('editing');
+  const inp=li.querySelector('.bl-inp'); if(inp){inp.focus(); moveCaret(inp);}
+}
+
+// ══════════════════════════════════════════════
+//  RERENDER
+// ══════════════════════════════════════════════
+function rerender(focusId=null){
+  blRoot.innerHTML='';
+  drillEmpty.style.display='none';
+  if(!curView) return;
+  let topNodes=[];
+  const docId=curView.type==='doc'?curView.id:nodes[curView.id]?.docId;
+  if(curView.type==='doc') topNodes=getCh(null,docId);
+  else{ const n=nodes[curView.id]; if(n) topNodes=getCh(n.id,docId);}
+  if(topNodes.length===0 && curView.type==='node') drillEmpty.style.display='block';
+  for(const n of topNodes) blRoot.appendChild(buildBullet(n));
+  updPracBtn(); renderSB();
+  if(focusId) setTimeout(()=>{
+    const li=blRoot.querySelector(`[data-id="${focusId}"]`);
+    if(li) enterEditLi(li);
+  },20);
+}
+
+function updPracBtn(){
+  const btn=document.getElementById('btn-prac');
+  if(!curView){btn.classList.add('hidden');return;}
+  const cards=curView.type==='doc'
+    ?collectCards(null,curView.id,true)
+    :collectCards(curView.id,nodes[curView.id]?.docId);
+  if(cards.length){btn.classList.remove('hidden');btn.textContent=`▶ Practice (${cards.length})`;}
+  else btn.classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════
+//  CONTEXT MENU
+// ══════════════════════════════════════════════
+const ctxEl=document.getElementById('ctx');
+ctxEl._nid=null; ctxEl._did=null;
+function openCtx(e,nodeId,docId){
+  ctxEl._nid=nodeId; ctxEl._did=docId;
+  ctxEl.querySelectorAll('.ci').forEach(el=>el.style.display='');
+  ctxEl.querySelectorAll('.cx-sep').forEach(el=>el.style.display='');
+  if(docId&&!nodeId){['drill','add-child','add-sibling','practice'].forEach(a=>{
+    const el=ctxEl.querySelector(`[data-a="${a}"]`); if(el)el.style.display='none';
+  });}
+  ctxEl.classList.add('open');
+  ctxEl.style.left=Math.min(e.clientX,innerWidth-185)+'px';
+  ctxEl.style.top=Math.min(e.clientY,innerHeight-220)+'px';
+}
+document.addEventListener('click',()=>ctxEl.classList.remove('open'));
+document.addEventListener('contextmenu',e=>{
+  const li=e.target.closest('.bl-item');
+  if(li){e.preventDefault();openCtx(e,li.dataset.id,null);}
+});
+ctxEl.addEventListener('click',async e=>{
+  const item=e.target.closest('.ci'); if(!item) return;
+  const a=item.dataset.a, nid=ctxEl._nid, did=ctxEl._did;
+  ctxEl.classList.remove('open');
+  if(a==='drill'&&nid) drillInto(nid);
+  if(a==='add-child'&&nid){const n=await mkNode(nodes[nid].docId,nid,'');rerender(n.id);}
+  if(a==='add-sibling'&&nid){const src=nodes[nid];const n=await mkNode(src.docId,src.parentId,'',nid);rerender(n.id);}
+  if(a==='practice'&&nid){const cards=collectCards(nid,nodes[nid].docId);openCfgFor(cards,[lbl(nodes[nid])]);}
+  if(a==='delete'){
+    if(did&&!nid){
+      if(!confirm('Delete this document?')) return;
+      if(curView&&curView.type==='doc'&&curView.id===did){curView=null;nav=[];renderView();}
+      await delDoc(did); renderSB();
+    } else if(nid){
+      await delNodeRec(nid); rerender(null);
+    }
+  }
+});
+
+// ══════════════════════════════════════════════
+//  SIDEBAR CONTROLS
+// ══════════════════════════════════════════════
+document.getElementById('sb-tog').addEventListener('click',()=>
+  document.getElementById('sb').classList.toggle('closed'));
+document.getElementById('sb-coll').addEventListener('click',()=>{sbExp.clear();renderSB();});
+
+document.getElementById('btn-new-doc').addEventListener('click',()=>{
+  document.getElementById('ndm').classList.add('open');
+  document.getElementById('ndm-inp').value='';
+  setTimeout(()=>document.getElementById('ndm-inp').focus(),40);
+});
+document.getElementById('ndm-cancel').addEventListener('click',()=>document.getElementById('ndm').classList.remove('open'));
+document.getElementById('ndm-ok').addEventListener('click',async()=>{
+  const t=document.getElementById('ndm-inp').value.trim()||'Untitled';
+  const d=await mkDoc(t); document.getElementById('ndm').classList.remove('open');
+  renderSB(); navTo('doc',d.id,d.title);
+});
+document.getElementById('ndm-inp').addEventListener('keydown',e=>{
+  if(e.key==='Enter') document.getElementById('ndm-ok').click();
+  if(e.key==='Escape') document.getElementById('ndm-cancel').click();
+});
+
+// Doc title edit
+document.getElementById('view-title').addEventListener('blur',async()=>{
+  if(!curView||curView.type!=='doc') return;
+  const t=viewTitleEl.textContent.trim()||'Untitled';
+  docs[curView.id].title=t; await saveDoc(docs[curView.id]);
+  renderSB();
+  if(nav.length) nav[nav.length-1].label=t;
+  renderBC();
+});
+document.getElementById('view-title').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();viewTitleEl.blur();}
+});
+
+// ══════════════════════════════════════════════
+//  PRACTICE CONFIG
+// ══════════════════════════════════════════════
+document.querySelectorAll('.seg-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.seg-btn').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on'); pCfgOrder=btn.dataset.order;
+  });
+});
+
+function openCfgFor(cards,labelParts){
+  if(!cards||!cards.length){alert('No cards found.');return;}
+  pendingCards={cards,labelParts};
+  document.getElementById('cfg-ov').classList.add('open');
+}
+
+document.getElementById('btn-prac').addEventListener('click',()=>{
+  if(!curView) return;
+  const cards=curView.type==='doc'
+    ?collectCards(null,curView.id,true)
+    :collectCards(curView.id,nodes[curView.id]?.docId);
+  const l=nav.length?nav[nav.length-1].label:'';
+  openCfgFor(cards,[l]);
+});
+
+document.getElementById('cfg-cancel').addEventListener('click',()=>{
+  document.getElementById('cfg-ov').classList.remove('open'); pendingCards=null;
+});
+document.getElementById('cfg-start').addEventListener('click',()=>{
+  document.getElementById('cfg-ov').classList.remove('open');
+  if(!pendingCards) return;
+  const {cards,labelParts}=pendingCards; pendingCards=null;
+  launchPrac(cards,labelParts,pCfgOrder==='rnd');
+});
+
+// ══════════════════════════════════════════════
+//  PRACTICE ENGINE
+// ══════════════════════════════════════════════
+function launchPrac(cards,labelParts,shuffle=false){
+  pRes=[]; pIdx=0; pRev=false;
+  pQ=shuffle?[...cards].sort(()=>Math.random()-.5):[...cards];
+  pLabel=(labelParts||[]).join(' › ');
+  document.getElementById('prac-ov').classList.add('open');
+  document.getElementById('prac-title').textContent=pLabel||'Practice';
+  showPCard();
+}
+
+function showPCard(){
+  if(pIdx>=pQ.length){endPrac();return;}
+  pRev=false;
+  const n=pQ[pIdx], tot=pQ.length;
+  document.getElementById('prac-prog').textContent=`${pIdx} / ${tot}`;
+  document.getElementById('prac-fill').style.width=(pIdx/tot*100)+'%';
+
+  // Breadcrumb using in-session depth
+  const depth=parseInt(document.getElementById('pp-bc').value);
+  const ancs=getAncs(n.id);
+  const bc=document.getElementById('prac-bc'); bc.innerHTML='';
+  const shown=depth===0?[]:ancs.slice(-depth);
+  shown.forEach((a,i)=>{
+    const sp=document.createElement('span'); sp.className='pbc-n'; sp.textContent=lbl(a)||'…';
+    bc.appendChild(sp);
+    if(i<shown.length-1){const s=document.createElement('span');s.className='pbc-s';s.textContent='›';bc.appendChild(s);}
+  });
+
+  document.getElementById('pf-q').textContent=n.q||n.text||'';
+  document.getElementById('pf').classList.remove('done');
+  document.getElementById('pb').classList.remove('show');
+
+  const ce=document.getElementById('pf-choices'); ce.innerHTML=''; ce.classList.add('hidden');
+  if(n.fmt==='mcq'&&n.choices&&n.choices.length){
+    ce.classList.remove('hidden');
+    const sh=[...n.choices.map((c,i)=>({c,i}))].sort(()=>Math.random()-.5);
+    sh.forEach(({c,i})=>{
+      const btn=document.createElement('div'); btn.className='pf-choice';
+      btn.textContent=String.fromCharCode(97+sh.findIndex(x=>x.i===i))+') '+c;
+      btn.dataset.orig=i;
+      btn.addEventListener('click',()=>reveal(n));
+      ce.appendChild(btn);
+    });
+  }
+  document.getElementById('rv-wrap').style.display='flex';
+  document.getElementById('res-wrap').classList.remove('show');
+}
+
+function reveal(node){
+  if(pRev) return; pRev=true;
+  node=node||pQ[pIdx];
+  document.getElementById('pf').classList.add('done');
+  if(node.fmt==='mcq'){
+    document.querySelectorAll('.pf-choice').forEach(el=>{
+      if(parseInt(el.dataset.orig)===node.correct) el.classList.add('hi');
+    });
+  }
+  document.getElementById('pb-ans').textContent=node.a||'';
+  document.getElementById('pb').classList.add('show');
+  document.getElementById('rv-wrap').style.display='none';
+  document.getElementById('res-wrap').classList.add('show');
+}
+
+function record(outcome){
+  const n=pQ[pIdx]; pRes.push({n,outcome});
+  if(outcome==='forgot'){const at=Math.min(pIdx+6,pQ.length);pQ.splice(at,0,n);}
+  pIdx++;
+  if(pIdx>=pQ.length) endPrac(); else showPCard();
+}
+
+function endPrac(){
+  document.getElementById('prac-ov').classList.remove('open');
+  document.getElementById('prac-panel').classList.remove('open');
+  if(pRes.length) showSum();
+}
+
+// Controls
+document.getElementById('btn-end-prac').addEventListener('click',()=>{
+  document.getElementById('prac-ov').classList.remove('open');
+  document.getElementById('prac-panel').classList.remove('open');
+  if(pRes.length) showSum();
+});
+document.getElementById('prac-cfg-btn').addEventListener('click',()=>
+  document.getElementById('prac-panel').classList.toggle('open'));
+document.getElementById('rv-btn').addEventListener('click',()=>reveal());
+document.getElementById('pf').addEventListener('click',()=>{if(!pRev)reveal();});
+document.getElementById('pc-forg').addEventListener('click',()=>{if(pRev)record('forgot');});
+document.getElementById('pc-skip').addEventListener('click',()=>{if(pRev)record('skip');});
+document.getElementById('pc-remb').addEventListener('click',()=>{if(pRev)record('remembered');});
+
+// In-session breadcrumb depth slider
+document.getElementById('pp-bc').addEventListener('input',e=>{
+  document.getElementById('pp-bc-val').textContent=e.target.value;
+  // Refresh current card's breadcrumb live
+  if(pIdx<pQ.length) showPCard();
+});
+// One-shot shuffle
+document.getElementById('pp-shuf').addEventListener('change',e=>{
+  if(!e.target.checked) return;
+  const done=pQ.slice(0,pIdx);
+  const rest=pQ.slice(pIdx).sort(()=>Math.random()-.5);
+  pQ=[...done,...rest]; e.target.checked=false;
+});
+
+// Keyboard
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('prac-ov').classList.contains('open')) return;
+  if(document.getElementById('sum-ov').classList.contains('open')) return;
+  const ae=document.activeElement;
+  if(ae&&(ae.contentEditable==='true'||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA')) return;
+  if(!pRev){
+    if(!['ArrowLeft','ArrowRight','ArrowDown','j','J','l','L','s','S'].includes(e.key))
+      {e.preventDefault();reveal();return;}
+  } else {
+    switch(e.key){
+      case 'ArrowRight':case 'l':case 'L':e.preventDefault();record('remembered');break;
+      case 'ArrowLeft':case 'j':case 'J':e.preventDefault();record('forgot');break;
+      case 'ArrowDown':case 's':case 'S':e.preventDefault();record('skip');break;
+    }
+  }
+});
+// Touch swipe
+let tx=0,ty=0;
+document.getElementById('prac-body').addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+document.getElementById('prac-body').addEventListener('touchend',e=>{
+  if(!document.getElementById('prac-ov').classList.contains('open')) return;
+  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(!pRev){reveal();return;}
+  if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>44){dx>0?record('remembered'):record('forgot');}
+  else if(dy<-44&&Math.abs(dy)>Math.abs(dx)){record('skip');}
+});
+
+// ══════════════════════════════════════════════
+//  SUMMARY
+// ══════════════════════════════════════════════
+function showSum(){
+  document.getElementById('sum-ov').classList.add('open');
+  const rem=pRes.filter(r=>r.outcome==='remembered');
+  const forg=pRes.filter(r=>r.outcome==='forgot');
+  const skip=pRes.filter(r=>r.outcome==='skip');
+  const body=document.getElementById('sum-body');
+  body.innerHTML=`<div class="ss">
+    <div class="ss-b"><div class="ss-n g">${rem.length}</div><div class="ss-l">Remembered</div></div>
+    <div class="ss-b"><div class="ss-n r">${forg.length}</div><div class="ss-l">Forgot</div></div>
+    <div class="ss-b"><div class="ss-n y">${skip.length}</div><div class="ss-l">Skipped</div></div>
+    <div class="ss-b"><div class="ss-n">${pRes.length}</div><div class="ss-l">Total</div></div>
+  </div><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);margin-top:2px">Breakdown</div>`;
+  const seen=new Set(),dd=[];
+  for(let i=pRes.length-1;i>=0;i--){if(!seen.has(pRes[i].n.id)){seen.add(pRes[i].n.id);dd.unshift(pRes[i]);}}
+  dd.forEach(r=>{
+    const row=document.createElement('div');row.className='sum-r';
+    const dot=document.createElement('div');dot.className='sdot '+(r.outcome==='remembered'?'g':r.outcome==='forgot'?'r':'y');
+    const tx=document.createElement('div');tx.className='stx';tx.textContent=lbl(r.n)||'(card)';
+    row.append(dot,tx);body.appendChild(row);
+  });
+  const rb=document.getElementById('sum-retry');
+  const fn=[...new Set(forg.map(r=>r.n))];
+  rb.disabled=!fn.length; rb.style.opacity=fn.length?'1':'.4';
+  rb.onclick=()=>{document.getElementById('sum-ov').classList.remove('open');launchPrac(fn,[pLabel]);};
+}
+document.getElementById('sum-x').addEventListener('click',()=>document.getElementById('sum-ov').classList.remove('open'));
+document.getElementById('sum-done').addEventListener('click',()=>document.getElementById('sum-ov').classList.remove('open'));
+
+// ══════════════════════════════════════════════
+//  EXPORT / IMPORT
+// ══════════════════════════════════════════════
+document.getElementById('btn-export').addEventListener('click',async()=>{
+  const ds=await db.docs.toArray(),ns=await db.nodes.toArray();
+  const b=new Blob([JSON.stringify({v:4,docs:ds,nodes:ns},null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(b),a=document.createElement('a');
+  a.href=u; a.download='recall-export.json'; a.click(); URL.revokeObjectURL(u);
+});
+document.getElementById('btn-import').addEventListener('click',()=>document.getElementById('import-file').click());
+document.getElementById('import-file').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const d=JSON.parse(await f.text());
+    if(!d.docs||!d.nodes) throw new Error('Invalid format');
+    if(!confirm(`Import ${d.docs.length} docs, ${d.nodes.length} nodes?`)) return;
+    for(const doc of d.docs) await db.docs.put(doc);
+    for(const n of d.nodes) await db.nodes.put(n);
+    await loadAll(); renderSB(); renderView();
+    alert('Import complete!');
+  }catch(err){alert('Import failed: '+err.message);}
+  e.target.value='';
+});
+
+// ══════════════════════════════════════════════
+//  SEED DATA (real nutrition content)
+// ══════════════════════════════════════════════
+async function seed(){
+  if(await db.docs.count()>0) return;
+
+  // Helper: create doc, return id
+  async function D(title){ const d=await mkDoc(title); return d.id; }
+  // Helper: create node, return id
+  async function N(did,pid,text){ return (await mkNode(did,pid,text)).id; }
+
+  // ── 4th Year > Nutrition > 1st Exam structure ──
+  // We create one doc per subject for easy navigation
+  // Top-level folder doc
+  const yr4 = await D('4th Year');
+  const nutr = await N(yr4,null,'Nutrition');
+  const exam1 = await N(yr4,nutr,'1st Exam');
+
+  // ── INTRO ──
+  const intro = await N(yr4,exam1,'Intro');
+  const fc = await N(yr4,intro,'Food Choices');
+  await N(yr4,fc,'Which food choice factor is directly influenced by genetics? ;;; Habit | #Taste perception | Economy | Social interaction');
+  await N(yr4,fc,'Hormones of pregnancy influence? ;;; Food habits | #Food cravings and aversions | Taste perception | Food economy');
+  await N(yr4,fc,'Role of emotions in food choices? ;;; People always eat more when emotional | People always eat less when emotional | #Some people cannot eat when upset while others eat in response to emotional stimuli | Emotions have no effect');
+  await N(yr4,fc,'Foods that provide health benefits beyond their nutrient contributions are called? ;; Functional foods');
+  await N(yr4,fc,'Which is a natural functional food? ;;; OJ fortified with calcium | #Oatmeal | Fortified cereal | Calcium supplements');
+  await N(yr4,fc,'Which is a manufactured functional food? ;;; Oatmeal | Tomatoes | #Orange juice fortified with calcium | Brown rice');
+
+  const nut = await N(yr4,intro,'The Nutrients');
+  await N(yr4,nut,'Why are carbs, fats, and proteins called macronutrients? ;; Because the body requires them in relatively large amounts');
+  await N(yr4,nut,'Simple carbohydrates include? ;;; Starch and fiber | #Monosaccharides and disaccharides | Triglycerides and cholesterol | Amino acids');
+  await N(yr4,nut,'Complex carbohydrates include? ;;; Monosaccharides and disaccharides | Amino acids | #Starch and fiber | Triglycerides');
+  await N(yr4,nut,'Lipids include? ;;; Amino acids and fiber | #Triglycerides and cholesterol | Monosaccharides and starch | Vitamins B and C');
+  await N(yr4,nut,'Building blocks of proteins ;; Amino acids');
+  await N(yr4,nut,'How many vitamins and minerals exist? ;; 13 vitamins, 16 minerals');
+  await N(yr4,nut,'Fat-soluble vitamins? ;;; A, B, C, D | #A, D, E, K | B, C, D, K | A, C, E, K');
+  await N(yr4,nut,'Water-soluble vitamins? ;;; Vitamin A and D | #Vitamin B and C | Vitamin E and K | Vitamin A and K');
+  await N(yr4,nut,'Minerals that are environmental contaminants displacing calcium? ;;; Iron and zinc | #Lead and mercury | Sodium and potassium | Magnesium and phosphorus');
+
+  const ncb = await N(yr4,intro,'Nutrient Composition of the Body');
+  await N(yr4,ncb,'% of body that is water, and fat % for young men and women? ;; 60% water; 13–21% fat in men, 23–31% fat in women');
+  await N(yr4,ncb,'Proteins build enzymes that regulate? ;;; Taste perception | #Digestion and energy metabolism | Vitamin absorption | Water balance');
+  await N(yr4,ncb,'Water in the body supplies the medium for? ;;; Energy storage | Vitamin synthesis | #Transporting materials to cells and carrying waste away | Hormone production');
+
+  const six = await N(yr4,intro,'Six Classes of Nutrients');
+  await N(yr4,six,'Which nutrient is organic but NOT energy-yielding? ;;; Carbohydrate | Fat | #Vitamin | Protein');
+  await N(yr4,six,'Is water an organic nutrient? ;; False — water is inorganic');
+  await N(yr4,six,'Which nutrient is both inorganic and not energy-yielding? ;;; Protein | Carbohydrate | Vitamin | #Mineral');
+
+  const ey = await N(yr4,intro,'Energy-Yielding Nutrients');
+  await N(yr4,ey,'Heat needed to raise 1 kg of water by 1°C ;; One kilocalorie (kcal)');
+  await N(yr4,ey,'kcal/g for each energy-yielding nutrient ;; Carbohydrate: 4 · Fat: 9 · Protein: 4');
+  await N(yr4,ey,'Alcohol provides 7 kcal/g but is not a nutrient because? ;;; It has no energy value | #It interferes with body growth, maintenance and repair | It is water-soluble | It is inorganic');
+  await N(yr4,ey,'Nutrients that do NOT yield energy? ;;; Carbohydrate and fat | Protein and vitamins | #Vitamins, minerals and water | Fat and protein');
+  await N(yr4,ey,'Energy density ;; A measure of energy a food provides relative to its amount (kcal/g)');
+
+  const dri = await N(yr4,intro,'Dietary Reference Intakes');
+  await N(yr4,dri,'Meets needs of 50% of the population ;; Estimated Average Requirement (EAR)');
+  await N(yr4,dri,'Meets needs of 98% of the population ;; Recommended Dietary Allowance (RDA)');
+  await N(yr4,dri,'Adequate Intake (AI)? ;;; More certain than RDA | #Established when insufficient evidence to determine EAR | Applies only to energy | Same as UL');
+  await N(yr4,dri,'Are AI values more tentative than RDA? ;; True');
+  await N(yr4,dri,'Highest intake that will not cause toxicity in healthy people ;; Tolerable Upper Intake Level (UL)');
+  await N(yr4,dri,'Average dietary energy maintaining energy balance ;; Estimated Energy Requirement (EER)');
+  await N(yr4,dri,'Does EER have a defined upper intake level? ;; False — excess energy always causes weight gain so no UL exists');
+  await N(yr4,dri,'AMDR for carbohydrate, fat, and protein? ;; Carbohydrate: 45–65% · Fat: 20–35% · Protein: 10–35%');
+  await N(yr4,dri,'Usual intake above RDA is considered? ;;; Toxic | Marginal | #Probably adequate | Definitely deficient');
+  await N(yr4,dri,'Usual intake below EAR is considered? ;;; Adequate | #Probably inadequate | Toxic | Marginal');
+  await N(yr4,dri,'Intake between RDA and EAR is? ;;; Probably adequate | Definitely inadequate | #May be adequate or inadequate | Approaching toxicity');
+
+  const na = await N(yr4,intro,'Nutrition Assessment');
+  await N(yr4,na,'NOT used in nutrition assessment? ;;; Anthropometric measurements | #Genetic testing | Physical examinations | Laboratory tests');
+  await N(yr4,na,'Deficiency caused by inadequate diet ;; Primary deficiency');
+  await N(yr4,na,'Deficiency caused by a problem inside the body ;; Secondary deficiency');
+  await N(yr4,na,'Declining stores and abnormal function = which stage? ;;; Overt | Primary | #Subclinical | Secondary');
+  await N(yr4,na,'Physical signs and symptoms of deficiency = which stage? ;;; Primary | Subclinical | #Overt | Secondary');
+  await N(yr4,na,'Symptom of nutrient deficiency? ;;; Obesity | Heart disease | #Night blindness | High blood pressure');
+  await N(yr4,na,'Symptom of energy excess? ;;; Night blindness | Muscle spasms | #Heart disease and diabetes | Bleeding gums');
+  await N(yr4,na,'Assessment method detecting subclinical deficiency? ;;; Physical exam | Diet history | #Laboratory tests | Anthropometric measures');
+  await N(yr4,na,'Assessment method detecting overt deficiency? ;;; Laboratory tests | Diet history | Health history | #Physical examination and anthropometric measures');
+  await N(yr4,na,'Reveals primary/secondary deficiency at earliest stage? ;;; Laboratory tests | Physical exam | #Diet and health history | Anthropometric measures');
+
+  // ── CARBS ──
+  const carbs = await N(yr4,exam1,'Carbs');
+  const cc = await N(yr4,carbs,"Chemist's View of Carbohydrates");
+  await N(yr4,cc,'Large molecules of chains of monosaccharides containing starches and fibers ;; Polysaccharides');
+  await N(yr4,cc,'Chemical formula shared by all three monosaccharides, order from least to most sweet ;; C6H12O6 | Galactose < Glucose < Fructose');
+  await N(yr4,cc,'Glucose is a building unit of which polysaccharides? ;; Starch and glycogen');
+  await N(yr4,cc,'Fructose occurs naturally in? ;;; Milk and cheese | #Fruits and honey | Wheat and rice | Barley and oats');
+  await N(yr4,cc,'Disaccharides are put together by condensation and taken apart by? ;; Hydrolysis');
+  await N(yr4,cc,'Composition of Maltose, Sucrose, Lactose? ;; Maltose: Glucose+Glucose · Sucrose: Glucose+Fructose · Lactose: Glucose+Galactose');
+  await N(yr4,cc,'Maltose is found in? ;;; Milk | Fruits | #Barley and starch breakdown | Table sugar');
+  await N(yr4,cc,'Storage form of glucose in liver and muscle cells ;; Glycogen');
+  await N(yr4,cc,'Is glycogen found in plants? ;; False — found in meats only, not in plants');
+  await N(yr4,cc,'Two forms of starch? ;; Branched: Amylopectin | Unbranched: Amylose');
+  await N(yr4,cc,"Why can't dietary fiber be digested? ;;; It contains no glucose | It dissolves in water | #The bonds between its monosaccharides cannot be broken by digestive enzymes | It is inorganic");
+  await N(yr4,cc,'Dietary fibers contribute little or no energy because? ;;; They contain no monosaccharides | #They pass through the body undigested | They are inorganic | They dissolve in water');
+
+  const sf = await N(yr4,carbs,'Soluble vs Insoluble Fiber');
+  await N(yr4,sf,'Soluble fiber dissolves in water, forms gels, and is fermented in? ;; The colon');
+  await N(yr4,sf,'Soluble fiber is found in? ;;; Whole grains and vegetable peels | #Oats, barley, legumes, citrus fruits | Partially milled grains | Cooked potatoes');
+  await N(yr4,sf,'Soluble fiber protects against heart disease and diabetes by? ;;; Promoting bowel movements | #Lowering blood cholesterol and glucose levels | Preventing colon cancer | Supporting colon');
+  await N(yr4,sf,'Insoluble fiber is found mostly in? ;;; Oats and barley | Citrus fruits and legumes | #Whole grains bran and vegetable peels | Cooked potatoes and pasta');
+  await N(yr4,sf,'Insoluble fiber prevents? ;;; Heart disease | Diabetes | #Diverticular disease | Colon cancer');
+  await N(yr4,sf,'Dietary fiber + functional fibers = ? ;; Total fiber');
+  await N(yr4,sf,'Undigested starch that works like dietary fiber ;; Resistant starch');
+  await N(yr4,sf,'Phytic acid risk? ;;; Dental caries | Ketosis | #Mineral deficiencies | Obesity');
+
+  const da = await N(yr4,carbs,'Digestion and Absorption');
+  await N(yr4,da,'Enzyme that begins starch digestion in the mouth ;; Salivary amylase');
+  await N(yr4,da,'Hours after meal for sugars and starches to be digested ;; 1 to 4 hours');
+  await N(yr4,da,'Bacterial fermentation of fiber generates? ;;; Glucose and starch | #Water, gas, short-chain fatty acids (1.5–2.5 kcal/g) | Ketone bodies | Glycogen');
+  await N(yr4,da,'Most nutrient absorption takes place in? ;; Small intestine');
+  await N(yr4,da,'Glucose and galactose absorbed by active transport; fructose by? ;; Facilitated diffusion');
+
+  const li2 = await N(yr4,carbs,'Lactose Intolerance');
+  await N(yr4,li2,'Lactose intolerance is caused by decline in? ;; Lactase activity');
+  await N(yr4,li2,'Other cause of lactose intolerance besides age? ;;; Kidney disease | #Damage to intestinal villi by disease, medicines, diarrhea, or malnutrition | Excess insulin | Liver failure');
+  await N(yr4,li2,'Symptoms of lactose intolerance? ;;; Night blindness and muscle spasms | #Bloating, abdominal discomfort, and diarrhea | Rapid heartbeat and trembling | Skin rashes');
+  await N(yr4,li2,'Highest prevalence of lactose intolerance? ;;; Scandinavians | Northern Europeans | #Native North Americans and Southeast Asians | Mediterranean');
+  await N(yr4,li2,'Max lactose without symptoms? ;; 6 grams (about 1 cup of milk)');
+  await N(yr4,li2,'Supplements needed on strict lactose-free diets? ;;; Vitamin A, C, and iron | #Riboflavin B2, vitamin D, and calcium | Zinc, magnesium, vitamin K | Vitamin E and potassium');
+  await N(yr4,li2,'% of prescription drugs containing lactose as filler? ;;; 5% | 10% | #20% | 30%');
+
+  const gm = await N(yr4,carbs,'Glucose Metabolism');
+  await N(yr4,gm,'Elevated blood glucose adhering to body proteins and fats forms? ;;; Glycogen and starch | #Glycoproteins and glycolipids | Ketone bodies | Fatty acids');
+  await N(yr4,gm,'Fraction of glycogen in liver vs muscles? ;; 1/3 in liver, 2/3 in muscles');
+  await N(yr4,gm,'HbA1c is used as diagnostic tool for? ;; Diabetes');
+  await N(yr4,gm,'Preferred energy source for brain, nerve cells, and developing red blood cells ;; Glucose');
+  await N(yr4,gm,'Making glucose from protein is called? ;; Gluconeogenesis');
+  await N(yr4,gm,'Allows protein to be used for energy production ;; Protein-sparing action');
+  await N(yr4,gm,'Effect of ketosis on the body? ;;; Raises blood pH | #Acidic effect that disturbs acid-base balance | Increases glycogen storage | Lowers blood glucose');
+  await N(yr4,gm,'Minimum carbohydrate/day to prevent ketosis and spare protein? ;; 50 to 100 grams');
+
+  const bgh = await N(yr4,carbs,'Blood Glucose Homeostasis');
+  await N(yr4,bgh,'Hormone moving glucose from blood into cells, and which cells produce it? ;; Insulin — produced by beta cells in the pancreas');
+  await N(yr4,bgh,'Hormone releasing glucose from glycogen into blood, and which cells? ;; Glucagon — produced by alpha cells in the pancreas');
+  await N(yr4,bgh,'Hormone releasing glucose during sudden stress, released from where? ;; Epinephrine — released from adrenal glands and certain neurons');
+  await N(yr4,bgh,'Normal, prediabetes, and diabetes fasting blood glucose ranges? ;; Normal: 70–99 mg/dL · Prediabetes: 100–125 · Diabetes: ≥126 mg/dL');
+
+  const diab = await N(yr4,carbs,'Diabetes');
+  await N(yr4,diab,'Type 1 diabetes problem? ;;; Cells fail to respond to insulin | #Pancreas fails to produce insulin | Excess insulin | Liver fails to store glycogen');
+  await N(yr4,diab,'Type 2 diabetes problem? ;;; Pancreas fails to produce insulin | #Cells fail to respond to insulin | Excess glucagon | Liver fails to break down glycogen');
+  await N(yr4,diab,'Gestational diabetes? ;;; Permanent type 2 | Type 1 in children | #Temporary diabetes in some pregnant women | Caused by obesity');
+
+  const hypo = await N(yr4,carbs,'Hypoglycemia');
+  await N(yr4,hypo,'Blood glucose drops below normal ;; Hypoglycemia');
+  await N(yr4,hypo,'Symptoms of hypoglycemia? ;;; Fatigue and weight gain | #Weakness, rapid heartbeat, sweating, anxiety, trembling | Bloating and diarrhea | Night blindness');
+  await N(yr4,hypo,'NOT a cause of hypoglycemia? ;;; Too much insulin | Strenuous physical activity | #High-fiber diet | Pancreatic tumors');
+
+  const gi = await N(yr4,carbs,'Glycemic Response and Index');
+  await N(yr4,gi,'How quickly glucose is absorbed, how high blood glucose rises, how quickly it returns to normal ;; Glycemic response');
+  await N(yr4,gi,'Classification of foods by glycemic responses ;; Glycemic index');
+  await N(yr4,gi,'Benefit of low GI foods? ;;; Fast glucose absorption | Sudden rise in blood glucose | #Improved blood lipids, reduced inflammation, appetite regulation | Increased insulin resistance');
+  await N(yr4,gi,'High GI food example? ;;; Barley | Legumes | #White bread and breakfast cereals | Oats');
+  await N(yr4,gi,'Low GI food example? ;;; Watermelon | Boiled potatoes | White rice | #Carrots and corn');
+
+  const hs = await N(yr4,carbs,'Health Effects of Sugars');
+  await N(yr4,hs,'Main cause of obesity linked to added sugars? ;;; Artificial sweeteners | #High-fructose corn syrup especially in beverages | Natural sugars in fruits | Starch breakdown');
+  await N(yr4,hs,'Added fructose induces fat-making in liver resulting in? ;;; Lower blood cholesterol | #Increased blood lipids and risk of heart disease | Improved insulin sensitivity | Reduced inflammation');
+  await N(yr4,hs,'Recommended daily limit of added sugars? ;; Women: <100 kcal/day · Men: <150 kcal/day');
+  await N(yr4,hs,'Bacteria ferment mouth sugars and produce acid within? ;; 20–30 minutes');
+  await N(yr4,hs,'Milk and cheese protect against dental caries by? ;;; Dissolving enamel | #Neutralizing acids, stimulating saliva, inhibiting bacteria, promoting remineralization | Preventing all bacterial growth | Replacing enamel');
+  await N(yr4,hs,'WHO: what % provides additional benefits beyond 10% added sugar limit? ;; 5% or less');
+
+  const as2 = await N(yr4,carbs,'Alternative Sweeteners');
+  await N(yr4,as2,'Nonnutritive sweeteners with no calories; must be avoided in PKU ;; Artificial sweeteners (e.g. Aspartame)');
+  await N(yr4,as2,'Herbal sweetener from a plant, generally recognized as safe ;; Stevia');
+  await N(yr4,as2,'Nutritive sweeteners with reduced calories ;; Sugar alcohols (e.g. Sorbitol)');
+
+  const hf = await N(yr4,carbs,'Health Effects of Starch and Fiber');
+  await N(yr4,hf,'Fiber that lowers blood cholesterol and protects against heart disease? ;;; Insoluble fiber | Resistant starch | #Soluble fiber | Functional fiber');
+  await N(yr4,hf,'Fiber that prevents constipation and diverticular disease? ;;; Soluble fiber | #Insoluble fiber | Resistant starch | Functional fiber');
+  await N(yr4,hf,'High-fiber diet protects against? ;;; Type 1 diabetes | #Colon cancer | Hypoglycemia | Lactose intolerance');
+  await N(yr4,hf,'Phytochemicals protect against cancer by acting as? ;; Antioxidants');
+  await N(yr4,hf,'Harmful effect of excessive fiber? ;;; Ketosis | Dental caries | #Mineral absorption limitation and abdominal discomfort | Hypoglycemia');
+
+  // ── LIPIDS ──
+  const lipids = await N(yr4,exam1,'Lipids');
+  await N(yr4,lipids,'Why do lipids supply more energy/g than carbs? ;;; More oxygen relative to C and H | #More C and H relative to oxygen | Slower digestion | Higher water content');
+  await N(yr4,lipids,'Basic structure of a triglyceride? ;;; 1 glycerol + 1 fatty acid | 1 glycerol + 2 fatty acids + phosphate | #1 glycerol + 3 fatty acids | 3 glycerol + 1 fatty acid');
+  await N(yr4,lipids,'Fatty acid chain length range? ;;; 2–12, odd numbers | #4–24, even numbers | 6–30, any number | 10–20, even numbers');
+  await N(yr4,lipids,'Byproduct of triglyceride formation (condensation)? ;;; CO₂ | Ammonia | Glucose | #Water');
+  await N(yr4,lipids,'Why are saturated fats solid at room temp? ;;; More oxygen content | Heavier molecular weight | #No double bonds → straight chains | Shorter chain length');
+  await N(yr4,lipids,'Why are unsaturated fats liquid at room temp? ;;; More oxygen atoms | Fewer carbon atoms | Shorter chain length | #Double bonds cause bending');
+  await N(yr4,lipids,'Animal fats and which tropical oils are mostly saturated? ;;; Olive and canola | #Coconut and palm | Sunflower and corn | Flaxseed and soybean');
+  await N(yr4,lipids,'Oils richest in monounsaturated fatty acids? ;;; Coconut and palm | Corn and soybean | #Olive and canola | Flaxseed and walnut');
+  await N(yr4,lipids,'Omega-3 polyunsaturated fatty acids are found in? ;;; Most vegetable oils | #Only a few oils | All plant-based oils equally | Only animal fats');
+  await N(yr4,lipids,'Linoleic acid (C18) classification? ;;; Omega-3 | Monounsaturated | #Omega-6 | Saturated');
+  await N(yr4,lipids,'Linolenic acid (C18) classification? ;;; Omega-6 | Saturated | Monounsaturated | #Omega-3');
+  await N(yr4,lipids,'Triglycerides make up what % of dietary lipids? ;;; 50% | 75% | #95% | 65%');
+  await N(yr4,lipids,'Best-known phospholipid? ;;; Cholesterol | Choline | Linolenic acid | #Lecithin');
+  await N(yr4,lipids,'How does lecithin differ from a triglyceride? ;;; Has 4 fatty acids | Lacks glycerol | #Only 2 fatty acids; 3rd position = phosphate + choline | Contains a sterol ring');
+  await N(yr4,lipids,'Why are phospholipids the main component of cell membranes? ;;; Rigid sterol structure | Insoluble in both water and fat | #Soluble in both water and fat | High saturated fat content');
+  await N(yr4,lipids,'Role of phospholipids as emulsifiers? ;;; Break triglycerides into fatty acids | Transport cholesterol to liver | #Keep fats suspended in watery fluids | Synthesize vitamin D');
+  await N(yr4,lipids,'Sterols differ from other lipids because they have? ;;; More fatty acid chains | A phosphate group | No carbon atoms | #A multiple-ring structure');
+  await N(yr4,lipids,'Most well-known sterol? ;;; Lecithin | #Cholesterol | Linoleic acid | Choline');
+  await N(yr4,lipids,'Vitamin D is synthesized from? ;;; Lecithin | Triglycerides | #Cholesterol | Linolenic acid');
+  await N(yr4,lipids,'Significant cholesterol found only in? ;;; Plant sterols | Tropical plant oils | Both plant and animal equally | #Animal-derived foods');
+  await N(yr4,lipids,'How do plant sterols affect cholesterol? ;;; Raise LDL directly | Convert LDL to HDL | #Inhibit cholesterol absorption → lower blood cholesterol | Stimulate liver bile');
+  await N(yr4,lipids,'Cholesterol buildup in artery walls leads to? ;;; Fatty liver | Kidney stones | #Atherosclerosis | Type 2 diabetes');
+  await N(yr4,lipids,'Average daily dietary intake of triglycerides? ;;; 10–20 g | 200–350 g | #50–100 g | 4–8 g');
+  await N(yr4,lipids,'Why is fat digestion challenging in the GI tract? ;;; Lipids too small for enzymes | Digestive enzymes are acidic | #Lipids hydrophobic; enzymes hydrophilic | Fat moves too fast');
+  await N(yr4,lipids,'Goal of fat digestion? ;;; Convert fat to glucose | Produce bile acids | #Dismantle triglycerides into monoglycerides, fatty acids, and glycerol | Break fat into amino acids');
+  await N(yr4,lipids,'Lingual lipase plays active role in? ;;; Adults primarily | #Infants primarily | Both equally | Only in stomach');
+  await N(yr4,lipids,'Hormone signaling gallbladder to release bile? ;;; Insulin | Glucagon | #Cholecystokinin (CCK) | Leptin');
+  await N(yr4,lipids,'Role of bile in fat digestion? ;;; Enzyme breaking peptide bonds | #Emulsifier — mixes fat into watery fluids | Hormone signaling fat storage | Transports fatty acids in blood');
+  await N(yr4,lipids,'How are small molecules (glycerol, short/medium-chain FA) absorbed? ;;; Packaged into chylomicrons | Via lymphatic system only | #Directly into the bloodstream | Through bile micelles');
+  await N(yr4,lipids,'Larger molecules form what complex for absorption? ;;; Chylomicrons | #Micelles | HDL particles | Liposomes');
+  await N(yr4,lipids,'After entering intestinal cells, monoglycerides + long-chain FA reassembled into? ;;; Phospholipids | Glycerol | #New triglycerides | Cholesterol');
+  await N(yr4,lipids,'Transport vehicle carrying new triglycerides from intestinal cells? ;;; HDL | LDL | Micelles | #Chylomicrons');
+  await N(yr4,lipids,'Chylomicrons first released into? ;;; Portal vein | #Lymphatic system | Bloodstream directly | Bile duct');
+  await N(yr4,lipids,'What does HDL do? ;;; Delivers fat to muscle cells | #Picks up LDL from body cells → liver for excretion | Carries triglycerides from intestine | Synthesizes cholesterol');
+  await N(yr4,lipids,'Blood lipid most directly linked to heart disease? ;;; HDL cholesterol | Triglycerides | #LDL cholesterol | Phospholipids');
+  await N(yr4,lipids,'Combination associated with HIGH risk of heart disease? ;;; High LDL + high HDL | Low LDL + low HDL | Low LDL + high HDL | #High LDL + low HDL');
+  await N(yr4,lipids,'Factor helping lower LDL and/or raise HDL? ;;; High saturated fat intake | Sedentary lifestyle | #Physical activity and weight control | High dietary cholesterol');
+  await N(yr4,lipids,'Trans fats effect on blood cholesterol? ;;; Raise HDL, lower LDL | No effect | #Raise LDL and lower HDL | Lower both');
+  await N(yr4,lipids,'Dietary cholesterol effect on blood cholesterol? ;;; Raises it significantly | Lowers it | #Raises it very little if at all | Only affects HDL');
+  await N(yr4,lipids,'Recommended % of daily energy from total fat? ;;; 10–20% | #20–35% | 35–50% | 15–25%');
+  await N(yr4,lipids,'Recommended limit for saturated fat? ;;; Less than 20% | Less than 5% | Less than 15% | #Less than 10% daily energy');
+  await N(yr4,lipids,'DRI for linoleic acid (omega-6)? ;;; 0.6–1.2% | 10–15% | #5–10% of daily energy | 1–3%');
+  await N(yr4,lipids,'DRI for linolenic acid (omega-3)? ;;; 5–10% | #0.6–1.2% of daily energy | 2–4% | Less than 0.5%');
+  await N(yr4,lipids,'Desirable blood lipids? ;; Total <200 mg/dL · LDL <100 · HDL >60 · Triglycerides <100 mg/dL');
+
+  // ── PROTEIN ──
+  const prot = await N(yr4,exam1,'Protein');
+  await N(yr4,prot,'Elements in proteins NOT in carbs or lipids? ;;; Carbon and oxygen | Hydrogen and sulfur | #Nitrogen | Phosphorus');
+  await N(yr4,prot,'Building blocks of proteins? ;; Amino acids');
+  await N(yr4,prot,'4 components of every amino acid? ;; C, H, amino group (NH2), acid group (COOH) — plus variable side chain (R group)');
+  await N(yr4,prot,'What makes each amino acid unique? ;;; Different amino groups | Different acid groups | #Different side chains (R groups) | Different carbon backbones');
+  await N(yr4,prot,'How many different amino acids? ;; 20');
+  await N(yr4,prot,'How many essential amino acids? ;; 9 — body cannot synthesize; must come from diet');
+  await N(yr4,prot,'How many nonessential amino acids? ;; 11 — body can synthesize');
+  await N(yr4,prot,'What is a conditionally essential amino acid? ;;; Always must come from diet | Body can always synthesize | #Usually nonessential but must come from diet under certain conditions | Found only in animal proteins');
+  await N(yr4,prot,'Essential AAs ;; Phenylalanine, Valine, Threonine, Tryptophan, Isoleucine, Methionine, Histidine, Leucine, Lysine');
+  await N(yr4,prot,'Tyrosine is made from which essential AA? ;;; Tryptophan | Lysine | #Phenylalanine | Valine');
+  await N(yr4,prot,'Amino acids are linked by what type of bond? ;; Peptide bond — formed by condensation; water released');
+  await N(yr4,prot,'Byproduct of peptide bond formation? ;; Water');
+  await N(yr4,prot,'Chain of many amino acids linked together? ;; Polypeptide');
+  await N(yr4,prot,'Disulfide bridges always involve which amino acid? ;;; Lysine | #Cysteine | Glycine | Arginine');
+  await N(yr4,prot,'Human insulin consists of how many amino acids? ;;; 20 | 100 | #51 | 75');
+  await N(yr4,prot,'Protein denaturation means? ;;; Gains new function | #Loses shape and ability to function | Absorbed faster | Gains stronger bonds');
+  await N(yr4,prot,'What denatures proteins in the stomach? ;;; Bile | Pepsin | #Hydrochloric acid (HCl) | Trypsin');
+  await N(yr4,prot,'What does pepsin do? ;;; Activates trypsin | #Cleaves proteins into smaller polypeptides and free amino acids | Absorbs amino acids | Converts trypsinogen to trypsin');
+  await N(yr4,prot,'What activates trypsinogen in the small intestine? ;;; HCl | Pepsin | #Enteropeptidase | Chymotrypsin');
+  await N(yr4,prot,'Trypsin cleaves peptide bonds next to? ;;; Phenylalanine and tyrosine | #Lysine and arginine | Glycine and alanine | Cysteine and methionine');
+  await N(yr4,prot,'Chymotrypsin cleaves bonds next to? ;;; Lysine and arginine | Glycine and serine | #Phenylalanine, tyrosine, tryptophan, methionine, asparagine, histidine | Valine and leucine');
+  await N(yr4,prot,'Carboxypeptidases cleave from which end? ;;; Amino (N) end | Middle | #Acid (carboxyl/C) end | Random');
+  await N(yr4,prot,'Final products of protein digestion absorbed? ;;; Polypeptides | Dipeptides only | #Single amino acids | Tripeptides only');
+  await N(yr4,prot,'After absorption, amino acids go from intestinal cells to? ;;; Lymphatic system | Muscles | #Capillaries → liver | Stored in intestinal cells');
+  await N(yr4,prot,'Estimated proteins in human body? ;;; 3,000 | 10,000 | #30,000 | 100,000');
+  await N(yr4,prot,'What determines amino acid sequence? ;;; Diet composition | #Genes (DNA) | Hormone levels | Digestive enzymes');
+  await N(yr4,prot,'Where does protein synthesis occur? ;;; Nucleus | Mitochondria | #Ribosomes | Golgi apparatus');
+  await N(yr4,prot,'Protein providing matrix for bone and teeth formation? ;;; Hemoglobin | Insulin | #Collagen | Transferrin');
+  await N(yr4,prot,'Insulin is an example of protein functioning as? ;;; Enzyme | Antibody | #Hormone | Transporter');
+  await N(yr4,prot,'What causes edema in protein malnutrition? ;;; Excess water | Kidney failure | #Plasma proteins leak into tissues → attract water → fluid accumulates | Excess sodium');
+  await N(yr4,prot,'How do proteins regulate acid-base balance? ;;; Release bile | #Attract H+ ions → reduce acidity | Convert acids to glucose | Excrete acids through sweat');
+  await N(yr4,prot,'Protein carrying oxygen from lungs to cells? ;;; Transferrin | Insulin | Albumin | #Hemoglobin');
+  await N(yr4,prot,'Protein carrying iron through plasma? ;;; Hemoglobin | #Transferrin | Albumin | Collagen');
+  await N(yr4,prot,'Nitrogen equilibrium means? ;;; No protein consumed | N in > N out | #N in = N out | N in < N out');
+  await N(yr4,prot,'Positive nitrogen balance occurs in? ;;; Starvation | Severe burns | #Infants, children, pregnant women, recovery | Sedentary adults');
+  await N(yr4,prot,'Negative nitrogen balance occurs in? ;;; Athletes building muscle | Pregnancy | #Starvation, burns, injuries, infections, fever | Healthy adults');
+  await N(yr4,prot,'Tyrosine is used to make? ;;; Serotonin and dopamine | #Norepinephrine and epinephrine | Acetylcholine and GABA | Insulin and glucagon');
+  await N(yr4,prot,'Two factors determining protein quality? ;;; Color and texture | Source and cooking | #Digestibility and amino acid composition | Fat content and fiber');
+  await N(yr4,prot,'Digestibility of most animal proteins? ;;; 50–70% | 70–90% | #90–99% | 100%');
+  await N(yr4,prot,'Limiting amino acid? ;;; AA in excess | Nonessential AA | #Essential AA supplied less than needed → limits protein synthesis | Found only in plants');
+  await N(yr4,prot,'Reference protein standard based on? ;;; Adult male | #Essential AA requirements of preschool-age children | Athletes | Infants only');
+  await N(yr4,prot,'Animal protein that is an exception to high quality? ;;; Eggs | Milk | #Gelatin | Fish');
+  await N(yr4,prot,'Plant protein considered high quality? ;;; Corn | Wheat | Rice | #Soy');
+  await N(yr4,prot,'Legumes are limiting in which amino acids? ;;; Isoleucine and lysine | #Methionine and tryptophan | Leucine and valine | Histidine and threonine');
+  await N(yr4,prot,'Why are grains a perfect complement to legumes? ;;; Both are high in lysine | #Grains are high in methionine and tryptophan — exactly where legumes are weak | Grains provide all EAAs | Grains high in isoleucine');
+  await N(yr4,prot,'Complementary proteins ;; Combining plant foods (legumes + grains) — plants have more diverse AA pattern');
+  await N(yr4,prot,'PEM occurs in two forms ;; Marasmus and Kwashiorkor');
+  await N(yr4,prot,'Marasmus caused by? ;;; Excess protein | #Inadequate energy and protein | Inadequate protein only | Excess fat');
+  await N(yr4,prot,'Kwashiorkor differs from marasmus in? ;;; More severe weight loss | Only adults | #Sudden inadequate protein with edema and fatty liver | Complete starvation');
+  await N(yr4,prot,'High-protein diets implicated in? ;;; Scurvy and rickets | #Heart disease, cancer, osteoporosis, obesity, kidney stones | Anemia and night blindness | Diabetes and hypothyroidism');
+  await N(yr4,prot,'Recommended % of daily energy from protein? ;;; 5–15% | #10–35% | 20–40% | 35–50%');
+  await N(yr4,prot,'Protein RDA for adults ;; 0.8 g/kg/day (athletes need 1.2–1.8 g/kg/day or more)');
+
+  // ── VITAMINS (WATER) ──
+  const vit = await N(yr4,exam1,'Vitamins (Water-Soluble)');
+  await N(yr4,vit,'Vitamins differ from macronutrients because? ;;; Provide more energy/g | Long chains | #Do not provide energy; needed for energy metabolism | Needed in gram quantities');
+  await N(yr4,vit,'How many vitamins important for human nutrition? ;; 13');
+  await N(yr4,vit,'Vitamin destroyed by light (milk sold in opaque containers)? ;;; Thiamin | Vitamin C | Folate | #Riboflavin (B2)');
+  await N(yr4,vit,'Vitamin heat-sensitive, destroyed by high temperatures? ;;; Riboflavin | #Thiamin (B1) | Biotin | Niacin');
+  await N(yr4,vit,'% of folate lost during food preparation? ;;; 10–30% | 20–50% | #50–90% | 30–60%');
+  await N(yr4,vit,'Vitamin C is destroyed by? ;;; Cold temperatures only | #Heat, air, and alkalis | Light and acid | Oxidation only');
+  await N(yr4,vit,'What is a provitamin? ;;; Synthetic vitamin | #Inactive form body converts to active vitamin | Vitamin stored in fat | Vitamin acting as hormone');
+  await N(yr4,vit,'Vitamin A exists in three active forms? ;; Retinol, Retinal, Retinoic acid');
+  await N(yr4,vit,'Vitamins body can synthesize if precursors available? ;;; B12, folate, niacin | #Vitamin A, D, and niacin | Vitamin C, E, K | Thiamin, riboflavin, biotin');
+  await N(yr4,vit,'Vitamins synthesized by GI microorganisms (not sufficient amounts)? ;;; Vitamin A and D | Vitamin C and E | #Vitamin K and B12 | Thiamin and riboflavin');
+  await N(yr4,vit,'All B vitamins function as? ;;; Antioxidants | Hormones | #Coenzymes | Structural proteins');
+  await N(yr4,vit,'B vitamins participating in energy extraction from glucose, AA, fat? ;;; Folate, B6, B12 | #Thiamin, riboflavin, niacin, biotin | Pantothenic acid, biotin, folate | B6, B12, pantothenic acid');
+  await N(yr4,vit,'Folate deficiency impairs? ;;; Iron absorption and vision | #Amino acid metabolism and nucleic acid synthesis → impairs protein synthesis and cell division | Oxygen transport | Fat metabolism');
+  await N(yr4,vit,'Major antioxidant vitamins? ;;; Thiamin, riboflavin, niacin | Vitamin A, D, K | #Vitamin C, vitamin E, beta-carotene | Folate, B6, B12');
+  await N(yr4,vit,'Fat-soluble vitamins? ;; A, D, E, K — water-soluble: C and all B vitamins');
+  await N(yr4,vit,'Fat-soluble vitamins absorbed how? ;;; Directly into bloodstream | #With fat in chylomicrons → lymphatic → bloodstream | Via portal vein | Kidney filtration');
+  await N(yr4,vit,'Fat-soluble vitamins travel in blood how? ;;; Move freely in watery blood | #Attached to protein carriers | Inside red blood cells | Dissolved in plasma');
+  await N(yr4,vit,'Excess fat-soluble vitamins stored where? ;;; Kidneys and lungs | Muscles and bones | #Liver and adipose tissue | Excreted in urine');
+  await N(yr4,vit,'Most toxic fat-soluble vitamins in high doses? ;;; E and K | #A and D | D and E | A and K');
+  await N(yr4,vit,'Water-soluble vitamins must be consumed daily because? ;;; Destroyed by stomach acid | #No reserve in storage | Toxic if stored | Evaporate quickly');
+  await N(yr4,vit,'Water-soluble vitamin with reported toxicity from high-dose supplements? ;;; Thiamin | Riboflavin | #Vitamin B6 | Vitamin C');
+  await N(yr4,vit,'Thiamin (B1) deficiency disease? ;;; Pellagra | Scurvy | #Beriberi | Rickets');
+  await N(yr4,vit,'Thiamin deficiency most common in? ;;; Children under 5 | Pregnant women | #Alcoholics | Elderly women');
+  await N(yr4,vit,'Riboflavin (B2) is component of which coenzymes? ;;; CoA and NAD | #FAD and FMN | ATP and ADP | TPP and PLP');
+  await N(yr4,vit,'Riboflavin also involved in? ;;; DNA synthesis | #Conversion of tryptophan to niacin and homocysteine to methionine | Bone matrix | Oxygen transport');
+  await N(yr4,vit,'Greatest risk for riboflavin deficiency? ;;; Athletes and children | Pregnant women | #Elderly and adolescents | Vegans only');
+  await N(yr4,vit,'Niacin (B3) exists as which two forms? ;;; Pyridoxine and pyridoxal | Retinol and retinal | #Nicotinic acid and nicotinamide | FAD and FMN');
+  await N(yr4,vit,'Niacin can be synthesized from which amino acid? ;;; Lysine | #Tryptophan | Methionine | Phenylalanine');
+  await N(yr4,vit,'Niacin deficiency disease and its 4 Ds? ;;; Beriberi | Scurvy | #Pellagra — dermatitis, diarrhea, dementia, death | Rickets');
+  await N(yr4,vit,'Niacin toxicity from supplements causes? ;;; Neuropathy and paralysis | #Flushing, liver damage, gastric ulcers, low BP, diarrhea, nausea | Edema and heart failure | Bleeding gums');
+  await N(yr4,vit,'Vitamin B6 active form? ;;; Pyridoxine | #Pyridoxal phosphate | Pyridoxamine | Nicotinamide');
+  await N(yr4,vit,'Vitamin B6 involved in? ;;; DNA synthesis and vision | #Tryptophan→niacin, heme, myelin, neurotransmitters, DNA carbon transfer | Fat digestion | Calcium absorption');
+  await N(yr4,vit,'B6 stored extensively in? ;;; Liver | Adipose tissue | #Muscle tissue | Kidneys');
+  await N(yr4,vit,'Low B6, folate, B12 all associated with elevated? ;;; Blood glucose | LDL cholesterol | #Blood homocysteine | Triglycerides');
+  await N(yr4,vit,"B6 deficiency commonly linked to? ;;; Dairy-free diets | #Alcohol abuse and certain drug therapies (e.g. isoniazid) | High-fat diets | Low calcium");
+  await N(yr4,vit,"Folate's major function? ;;; Oxygen transport | #DNA synthesis | Calcium absorption | Fat emulsification");
+  await N(yr4,vit,'Adequate folate before/during early pregnancy reduces risk of? ;;; Gestational diabetes | Preeclampsia | #Neural tube defects | Premature birth');
+  await N(yr4,vit,'High folate intake can mask? ;;; Vitamin C deficiency | Iron deficiency | #Vitamin B12 deficiency | Thiamin deficiency');
+  await N(yr4,vit,'B12 and folate relationship? ;;; Competitive | #Interdependent — each must have the other to be activated | Independent | B12 converted from folate');
+  await N(yr4,vit,'What can folic acid NOT do in B12 deficiency? ;;; Alleviate macrocytic anemia | #Stop progressive neurological impairment | Activate folate | Support DNA synthesis');
+  await N(yr4,vit,'Pernicious anemia treatment? ;;; Oral B12 | High-dose folate | #Parenteral (injection) B12 | Dietary meat only');
+  await N(yr4,vit,'B12 found only in? ;;; Green leafy vegetables | Whole grains | #Animal foods (meat, fish, poultry, milk, eggs, cheese) | Legumes and seeds');
+  await N(yr4,vit,'Pantothenic acid (B5) functions as? ;;; Antioxidant | #Part of coenzyme A in energy metabolism | Component of FAD and FMN | Coenzyme for DNA synthesis');
+  await N(yr4,vit,'Biotin (B7) involved in? ;;; Vision and immune function | #Energy metabolism, fatty acid synthesis, AA metabolism, glycogen formation | DNA synthesis | Collagen synthesis');
+  await N(yr4,vit,'Vitamin C prevents scurvy by promoting? ;;; Iron absorption | DNA synthesis | #Collagen synthesis | Calcium absorption');
+  await N(yr4,vit,'Vitamin C also protects which nutrients from destruction? ;;; B vitamins and calcium | #Vitamin A, E, PUFA, and iron | Vitamin D and zinc | Vitamin K and magnesium');
+  await N(yr4,vit,'Other functions of vitamin C? ;;; Fat digestion and bile | Bone mineralization | #Metabolism of certain AAs, thyroxin synthesis, iron absorption, immune function | Nerve conduction');
+  await N(yr4,vit,'Best food sources of vitamin C? ;;; Dairy and eggs | Whole grains and legumes | #Citrus fruits and juices | Meat and fish');
+  await N(yr4,vit,'Vitamin C deficiency (scurvy) symptoms? ;; Bleeding gums, pinpoint hemorrhages, muscle degeneration, delayed wound healing, soft teeth, anemia, bone softening');
+  await N(yr4,vit,'Why smokers need extra 35 mg/day vitamin C? ;;; Destroys fat-soluble vitamins | #Smoking increases oxidative stress and metabolic turnover of C | Nicotine blocks absorption | Only collagen breakdown');
+  await N(yr4,vit,'Large doses of vitamin C prevent colds? ;;; Strong evidence | #No clear and convincing evidence | Only in athletes | Only before infection');
+
+  console.log('Seed complete');
+}
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+async function init(){
+  await loadAll();
+  await seed();
+  await loadAll();
+  renderSB();
+  if(docOrder.length){
+    sbExp.add(docOrder[0]);
+    navTo('doc',docOrder[0],docs[docOrder[0]].title);
+  }
+}
+init();
+</script>
+</body>
+</html>
